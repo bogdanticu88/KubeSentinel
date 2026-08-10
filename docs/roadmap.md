@@ -28,10 +28,12 @@ will eventually end up.
       findings, with exposure and RBAC context rather than reporting them
       in isolation. Reproduces both worked risk examples from the original
       design brief exactly.
-- [ ] Not yet done: dedup a Pod's findings against its owning Deployment,
-      currently both get flagged separately for the same thing since they
-      are genuinely separate API objects. Needs an owner-reference
-      correlation pass, likely folded into the Phase 3 or Phase 5 work.
+- [x] Stop collecting a Pod owned by a ReplicaSet, StatefulSet, DaemonSet,
+      or Job, and a Job owned by a CronJob, they carried the exact same pod
+      template as their controller and every finding showed up once per
+      running replica on top of once for the controller. Static pods like
+      kube-apiserver are owned by the Node, not a controller, and are
+      unaffected.
 
 ## Phase 3: Baseline and drift
 

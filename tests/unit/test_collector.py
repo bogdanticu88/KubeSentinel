@@ -85,6 +85,93 @@ def test_count_nodes_records_a_connection_failure_without_raising():
     assert result.warnings[0].resource_kind == "Node"
 
 
+def _pod_owned_by(kind: str, name: str = "child") -> dict:
+    return {
+        "apiVersion": "v1",
+        "kind": "Pod",
+        "metadata": {
+            "name": name,
+            "namespace": "default",
+            "ownerReferences": [{"kind": kind, "name": "owner", "controller": True}],
+        },
+        "spec": {"containers": [{"name": "app"}]},
+    }
+
+
+def test_pods_owned_by_a_replicaset_statefulset_daemonset_or_job_are_skipped():
+    for owner_kind in ("ReplicaSet", "StatefulSet", "DaemonSet", "Job"):
+        result = CollectionResult()
+        pod = _pod_owned_by(owner_kind)
+        _collect_kind(result, FakeApiClient(), "Pod", lambda pod=pod: SimpleNamespace(items=[pod]))
+        assert result.resources == [], f"pod owned by {owner_kind} should have been skipped"
+
+
+def test_a_job_owned_by_a_cronjob_is_skipped():
+    result = CollectionResult()
+    job = {
+        "apiVersion": "batch/v1",
+        "kind": "Job",
+        "metadata": {
+            "name": "nightly-backup-28912345",
+            "namespace": "default",
+            "ownerReferences": [{"kind": "CronJob", "name": "nightly-backup", "controller": True}],
+        },
+        "spec": {"template": {"spec": {"containers": [{"name": "backup"}]}}},
+    }
+
+    _collect_kind(result, FakeApiClient(), "Job", lambda: SimpleNamespace(items=[job]))
+
+    assert result.resources == []
+
+
+def test_a_static_pod_owned_by_a_node_is_not_skipped():
+    # kubelet sets the Node as owner for a static pod like kube-apiserver,
+    # that is not a controller kind this collector also lists, so there is
+    # nothing to duplicate against, the pod has to stay.
+    result = CollectionResult()
+    static_pod = _pod_owned_by("Node", name="kube-apiserver-control-plane")
+
+    _collect_kind(result, FakeApiClient(), "Pod", lambda: SimpleNamespace(items=[static_pod]))
+
+    assert len(result.resources) == 1
+    assert result.resources[0].name == "kube-apiserver-control-plane"
+
+
+def test_a_pod_with_no_owner_at_all_is_not_skipped():
+    result = CollectionResult()
+    orphan_pod = {
+        "apiVersion": "v1",
+        "kind": "Pod",
+        "metadata": {"name": "debug-shell", "namespace": "default"},
+        "spec": {"containers": [{"name": "shell"}]},
+    }
+
+    _collect_kind(result, FakeApiClient(), "Pod", lambda: SimpleNamespace(items=[orphan_pod]))
+
+    assert len(result.resources) == 1
+
+
+def test_a_deployment_with_an_owner_is_never_skipped():
+    # The skip list only applies to Pod and Job, a Deployment managed by an
+    # operator or an ArgoCD Application still has to be collected, there is
+    # no duplicate Deployment-shaped resource anywhere else to defer to.
+    result = CollectionResult()
+    deployment = {
+        "apiVersion": "apps/v1",
+        "kind": "Deployment",
+        "metadata": {
+            "name": "app",
+            "namespace": "default",
+            "ownerReferences": [{"kind": "Application", "name": "my-app", "controller": True}],
+        },
+        "spec": {"template": {"spec": {"containers": [{"name": "app"}]}}},
+    }
+
+    _collect_kind(result, FakeApiClient(), "Deployment", lambda: SimpleNamespace(items=[deployment]))
+
+    assert len(result.resources) == 1
+
+
 def test_collect_kind_skips_a_malformed_item_without_dropping_the_rest():
     result = CollectionResult()
 

@@ -23,6 +23,27 @@ from kubesentinel.models.scan import CollectionWarning, ResourceCounts
 
 _WORKLOAD_KINDS = {"Pod", "Deployment", "StatefulSet", "DaemonSet", "Job", "CronJob"}
 
+# A Pod created by a Deployment, StatefulSet, DaemonSet, or Job carries the
+# exact same securityContext, image, and RBAC identity as its controller's
+# pod template, that is where those settings actually come from. Collecting
+# both means every misconfiguration and vulnerability shows up twice, once
+# per running replica on top of once for the controller, and with three
+# replicas that is four copies of the same finding. Same story for a Job
+# spawned by a CronJob. Static pods like kube-apiserver are also owned, by
+# the Node, not by anything in this table, so they are unaffected.
+_SKIP_IF_OWNED_BY = {
+    "Pod": {"ReplicaSet", "StatefulSet", "DaemonSet", "Job"},
+    "Job": {"CronJob"},
+}
+
+
+def _is_controller_instance(kind: str, metadata: dict[str, Any]) -> bool:
+    owner_kinds_to_skip = _SKIP_IF_OWNED_BY.get(kind)
+    if not owner_kinds_to_skip:
+        return False
+    owners = metadata.get("ownerReferences") or []
+    return any(owner.get("kind") in owner_kinds_to_skip for owner in owners)
+
 
 @dataclass
 class CollectionResult:
@@ -113,6 +134,8 @@ def _collect_kind(
         try:
             raw = api_client.sanitize_for_serialization(item)
             metadata = raw.get("metadata") or {}
+            if _is_controller_instance(kind, metadata):
+                continue
             data = normalize_resource(kind, raw)
         except (KeyError, TypeError, AttributeError) as malformed_error:
             result.warnings.append(
