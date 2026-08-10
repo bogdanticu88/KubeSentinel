@@ -15,6 +15,7 @@ from typing import Any
 
 from kubernetes import client
 from kubernetes.client.exceptions import ApiException
+from urllib3.exceptions import MaxRetryError
 
 from kubesentinel.collector.normalize import normalize_resource
 from kubesentinel.models.resource import CollectedResource
@@ -99,6 +100,14 @@ def _collect_kind(
             message = f"failed to list {kind}: HTTP {error.status} {error.reason}"
         result.warnings.append(CollectionWarning(resource_kind=kind, message=message))
         return
+    except (MaxRetryError, OSError) as error:
+        result.warnings.append(
+            CollectionWarning(
+                resource_kind=kind,
+                message=f"could not reach the API server to list {kind}: {error}",
+            )
+        )
+        return
 
     for item in response.items:
         try:
@@ -137,6 +146,14 @@ def _count_nodes(result: CollectionResult, core: client.CoreV1Api) -> int:
             CollectionWarning(
                 resource_kind="Node",
                 message=f"failed to list nodes: HTTP {error.status} {error.reason}",
+            )
+        )
+        return 0
+    except (MaxRetryError, OSError) as error:
+        result.warnings.append(
+            CollectionWarning(
+                resource_kind="Node",
+                message=f"could not reach the API server to count nodes: {error}",
             )
         )
         return 0

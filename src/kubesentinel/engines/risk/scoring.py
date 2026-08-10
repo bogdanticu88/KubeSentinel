@@ -1,24 +1,13 @@
 """Deterministic, explainable security scoring.
 
-Each dimension starts at 100 and loses points for every open finding in
-that dimension, weighted by the finding's risk, not its raw severity. Risk
-is what the correlation engine produces once it knows a finding's exposure
-and RBAC context, severity alone would score a critical CVE on an isolated
-internal workload the same as one sitting behind a wildcard ServiceAccount
-on an internet-facing Service, which is exactly the gap this project exists
-to close. Findings that correlation never touches (RBAC and networking
-findings on the Role/Service itself, not a workload) keep risk equal to
-severity, so this still behaves like severity-weighted scoring for them.
-
-A dimension with no rule assigned to it at all reports score=None instead
-of a fake 100, since "no rules cover this yet" is not the same claim as
-"nothing is wrong". That has to be judged by whether any *rule* targets the
-dimension, not by whether this particular scan happened to find something,
-a clean cluster with real configuration rules loaded should score 100 on
-Configuration, not "not available". Supply Chain is a special case of the
-same principle: nothing in the rule set targets it, its findings come from
-a scanner adapter instead, so coverage there has to be told explicitly that
-a scan actually ran, a clean image with zero CVEs still needs to score 100.
+Each dimension starts at 100 and loses points per finding, weighted by risk
+rather than raw severity, so a critical CVE on an isolated workload does not
+cost the same as one sitting behind a wildcard ServiceAccount on a public
+Service. A dimension nothing covers yet reports score=None instead of a
+fake 100, "no rules here" is not the same claim as "nothing is wrong".
+Coverage is decided by which rules are loaded (plus an explicit override for
+Supply Chain, whose findings come from a scanner adapter, not a rule), never
+by whether this particular scan happened to find something.
 """
 
 from kubesentinel.models.finding import Finding

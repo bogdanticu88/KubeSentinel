@@ -13,10 +13,12 @@ findings, it will never be the thing producing them.
 
 ## Status
 
-Early development. The current milestone is a working `kubesentinel scan` command: connect to a
-cluster, collect security-relevant resources, run the misconfiguration rule set against them, and
-print an explainable security score with the top risks. Drift detection, baselines, historical
-scoring, and attack path analysis come in later phases; see `docs/roadmap.md`.
+Early development. `kubesentinel scan` works end to end: connect to a cluster, collect
+security-relevant resources, run the misconfiguration rule set, optionally scan workload images
+for known vulnerabilities with Trivy, and print an explainable, risk-weighted score. Risk is
+adjusted from a finding's raw severity based on whether its workload is exposed and what its
+ServiceAccount can do, not just reported at face value. Baselines, drift detection, historical
+scoring, and the attack path graph come in later phases; see `docs/roadmap.md`.
 
 ## Why this exists
 
@@ -47,6 +49,15 @@ cluster, `--namespace` to limit the scan, and `--output json` for machine-readab
 kubesentinel scan --context kind-local --output json
 ```
 
+Add `--with-vulnerabilities` to also scan workload images for known CVEs with
+[Trivy](https://github.com/aquasecurity/trivy). This is opt-in on purpose: Trivy needs its own
+database on first run and touches the network on every scan, neither of which the core
+misconfiguration engine should ever require.
+
+```bash
+kubesentinel scan --with-vulnerabilities
+```
+
 ## Development
 
 ```bash
@@ -61,6 +72,11 @@ mypy src
 KubeSentinel follows least privilege by default. It is read-only against the Kubernetes API,
 never collects secret values, sends no telemetry, and requires no external service to function.
 Everything it needs can run entirely inside your own environment.
+
+`--with-vulnerabilities` is the one exception worth calling out plainly: it needs to pull image
+data from your container registry, which is a different trust boundary than the Kubernetes API
+and isn't covered by any RBAC permission. A private registry Trivy can't authenticate to will
+just fail that one image and get logged as a warning, it won't stop the rest of the scan.
 
 ## License
 

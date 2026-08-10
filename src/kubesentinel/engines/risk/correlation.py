@@ -1,19 +1,16 @@
 """Adjusts a finding's risk based on the workload's exposure and RBAC context.
 
-Severity never changes, it is a rule's or a CVE's own intrinsic rating.
-Risk is what this module produces: the same finding read differently
-depending on whether its workload is reachable from outside the cluster and
-whether its ServiceAccount can read Secrets, escalate privileges, or holds
-wildcard permissions. This is a single-hop join, Service selector to
-workload labels, ServiceAccount to a bound Role through a Binding, not the
-general attack-path graph, that is its own later phase. It is enough to
-reproduce the two worked examples from the project's own design brief: an
-isolated critical CVE reads as HIGH, a fully exposed medium one reads as
-CRITICAL.
+Severity is a rule's or a CVE's own intrinsic rating and never changes. Risk
+is what this module produces: the same finding read differently depending
+on whether its workload is reachable from outside the cluster and whether
+its ServiceAccount can read Secrets, escalate privileges, or holds wildcard
+permissions. This is a single-hop join (Service selector to workload
+labels, ServiceAccount to a bound Role through a Binding), not the general
+attack-path graph, that is a later phase.
 
-Only findings on a workload (Pod, Deployment, StatefulSet, DaemonSet, Job,
-CronJob) get touched. A finding on a Role or a Service itself is not scoped
-to one running workload instance the way this join needs, it keeps risk
+Only findings scoped to a workload (Pod, Deployment, StatefulSet, DaemonSet,
+Job, CronJob) get touched, a finding on a Role or a Service itself is not
+tied to one running instance the way this join needs, so it keeps risk
 equal to severity.
 """
 
