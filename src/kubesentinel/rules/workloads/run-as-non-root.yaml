@@ -1,0 +1,25 @@
+id: KS-WORKLOAD-002
+name: Container not required to run as non-root
+category: workloads
+dimension: workloads
+severity: high
+description: >
+  A container does not set runAsNonRoot to true, so it is free to run as
+  UID 0 if its image does not already default to a non-root user.
+selector:
+  kinds: [Pod, Deployment, StatefulSet, DaemonSet, Job, CronJob]
+conditions:
+  - field: containers[].securityContext.runAsNonRoot
+    operator: not_equals
+    value: true
+risk_rationale: >
+  Most container images that do not explicitly set a USER default to root.
+  Without runAsNonRoot enforced, a process compromise inside the container
+  hands the attacker root inside that container's namespace, which widens
+  what a kernel or capability escape can reach and makes host filesystem
+  mounts far more dangerous.
+remediation: |
+  securityContext:
+    runAsNonRoot: true
+references:
+  - https://kubernetes.io/docs/concepts/security/pod-security-standards/

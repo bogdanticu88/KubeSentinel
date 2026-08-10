@@ -1,0 +1,27 @@
+id: KS-WORKLOAD-010
+name: Writable root filesystem
+category: workloads
+dimension: workloads
+severity: medium
+description: >
+  A container does not set readOnlyRootFilesystem to true, so its root
+  filesystem can be written to at runtime.
+selector:
+  kinds: [Pod, Deployment, StatefulSet, DaemonSet, Job, CronJob]
+conditions:
+  - field: containers[].securityContext.readOnlyRootFilesystem
+    operator: not_equals
+    value: true
+risk_rationale: >
+  A writable root filesystem lets an attacker who gets code execution in
+  the container drop tools, replace binaries, or persist a backdoor inside
+  the running container. A read-only root filesystem does not stop an
+  initial compromise, but it removes a lot of what an attacker would
+  otherwise do next, and it is one of the cheapest hardening settings
+  available.
+remediation: |
+  securityContext:
+    readOnlyRootFilesystem: true
+  # mount an emptyDir volume for any path the process genuinely needs to write to
+references:
+  - https://kubernetes.io/docs/concepts/security/pod-security-standards/

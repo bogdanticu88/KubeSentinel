@@ -1,0 +1,25 @@
+id: KS-WORKLOAD-007
+name: Pod uses the host IPC namespace
+category: workloads
+dimension: workloads
+severity: high
+description: >
+  A workload sets hostIPC to true, sharing the node's inter-process
+  communication namespace with its containers.
+selector:
+  kinds: [Pod, Deployment, StatefulSet, DaemonSet, Job, CronJob]
+conditions:
+  - field: hostIPC
+    operator: equals
+    value: true
+risk_rationale: >
+  hostIPC gives the workload access to shared memory segments and
+  semaphores used by processes on the node, including other workloads.
+  Some applications use shared memory to pass sensitive data between
+  processes, assuming that only their own container can see it. hostIPC
+  breaks that assumption.
+remediation: |
+  spec:
+    hostIPC: false
+references:
+  - https://kubernetes.io/docs/concepts/security/pod-security-standards/

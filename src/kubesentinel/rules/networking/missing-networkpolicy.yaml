@@ -1,0 +1,29 @@
+id: KS-NET-001
+name: Namespace has no NetworkPolicy
+category: networking
+dimension: networking
+severity: medium
+type: namespace_missing_resource
+description: >
+  A namespace has no NetworkPolicy defined at all, so every pod inside it
+  can be reached from every other pod in the cluster by default.
+require_absent_kind: NetworkPolicy
+exclude_namespaces: [kube-system, kube-public, kube-node-lease]
+risk_rationale: >
+  Kubernetes allows all pod-to-pod traffic unless a NetworkPolicy says
+  otherwise. Without one in a namespace, a compromise of any single pod
+  anywhere in the cluster (not just this namespace) can reach every
+  service in this namespace over the network, regardless of whether that
+  access was ever intended. A default-deny policy plus explicit allows is
+  what actually enforces the isolation namespaces are often assumed to
+  provide.
+remediation: |
+  apiVersion: networking.k8s.io/v1
+  kind: NetworkPolicy
+  metadata:
+    name: default-deny
+  spec:
+    podSelector: {}
+    policyTypes: [Ingress, Egress]
+references:
+  - https://kubernetes.io/docs/concepts/services-networking/network-policies/

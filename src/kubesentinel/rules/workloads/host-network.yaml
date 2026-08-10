@@ -1,0 +1,26 @@
+id: KS-WORKLOAD-005
+name: Pod uses the host network namespace
+category: workloads
+dimension: workloads
+severity: high
+description: >
+  A workload sets hostNetwork to true, sharing the node's network
+  namespace instead of getting its own.
+selector:
+  kinds: [Pod, Deployment, StatefulSet, DaemonSet, Job, CronJob]
+conditions:
+  - field: hostNetwork
+    operator: equals
+    value: true
+risk_rationale: >
+  hostNetwork removes the network isolation Kubernetes normally gives a
+  pod. The workload can see every interface on the node, bind to ports
+  other processes on that node are listening on, and sniff traffic that
+  was never meant to reach it. It also lets the workload reach services
+  bound to localhost on the node, which are often left unauthenticated on
+  the assumption that only the node itself can reach them.
+remediation: |
+  spec:
+    hostNetwork: false
+references:
+  - https://kubernetes.io/docs/concepts/security/pod-security-standards/

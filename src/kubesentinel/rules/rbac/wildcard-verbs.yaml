@@ -1,0 +1,27 @@
+id: KS-RBAC-002
+name: Wildcard verbs in a Role or ClusterRole
+category: rbac
+dimension: identity
+severity: high
+description: >
+  A Role or ClusterRole grants every verb on its resources instead of
+  the specific actions the workload needs.
+selector:
+  kinds: [Role, ClusterRole]
+conditions:
+  - field: rules[].verbs
+    operator: contains
+    value: "*"
+risk_rationale: >
+  A wildcard verb includes create, delete, patch and deletecollection
+  alongside the get and list a workload typically needs. Anything bound
+  to this role can modify or destroy the resources it covers, not just
+  read them, which turns a read-only integration into a full write
+  primitive the moment the role is misused or the workload is compromised.
+remediation: |
+  rules:
+    - apiGroups: [""]
+      resources: ["pods"]
+      verbs: ["get", "list", "watch"]   # only the verbs actually used
+references:
+  - https://kubernetes.io/docs/reference/access-authn-authz/rbac/

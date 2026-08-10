@@ -1,0 +1,26 @@
+id: KS-WORKLOAD-001
+name: Privileged container
+category: workloads
+dimension: workloads
+severity: critical
+description: >
+  A container's securityContext sets privileged to true, which turns off
+  most of the isolation a container normally provides.
+selector:
+  kinds: [Pod, Deployment, StatefulSet, DaemonSet, Job, CronJob]
+conditions:
+  - field: containers[].securityContext.privileged
+    operator: equals
+    value: true
+risk_rationale: >
+  A privileged container runs with almost all the capabilities of the host
+  root user: it can access every device on the node, change kernel
+  parameters, and in most runtime configurations break out to the
+  underlying node outright. If this workload is ever compromised, the
+  container boundary will not slow an attacker down.
+remediation: |
+  securityContext:
+    privileged: false
+references:
+  - https://kubernetes.io/docs/tasks/configure-pod-container/security-context/
+  - https://kubernetes.io/docs/concepts/security/pod-security-standards/

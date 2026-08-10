@@ -1,0 +1,28 @@
+id: KS-WORKLOAD-008
+name: hostPath volume mounted
+category: workloads
+dimension: workloads
+severity: critical
+description: >
+  A workload mounts a hostPath volume, giving its containers direct access
+  to a path on the node's filesystem.
+selector:
+  kinds: [Pod, Deployment, StatefulSet, DaemonSet, Job, CronJob]
+conditions:
+  - field: volumes[].hostPath
+    operator: exists
+risk_rationale: >
+  A hostPath volume punches a hole through the container filesystem
+  boundary straight to the node. Depending on which path is mounted, this
+  can let the workload read other pods' secrets from the kubelet's
+  filesystem, overwrite binaries the node relies on, or write a cron entry
+  or systemd unit that runs as root the next time the node executes it.
+  Mounting the Docker or containerd socket this way is effectively
+  granting root on the node.
+remediation: |
+  Prefer a PersistentVolumeClaim, emptyDir, or a purpose-built CSI driver.
+  If a hostPath mount is genuinely required, mount the narrowest possible
+  path read-only and document why in the workload's own review notes.
+references:
+  - https://kubernetes.io/docs/concepts/storage/volumes/#hostpath
+  - https://kubernetes.io/docs/concepts/security/pod-security-standards/

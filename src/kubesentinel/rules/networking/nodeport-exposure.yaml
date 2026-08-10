@@ -1,0 +1,27 @@
+id: KS-NET-003
+name: Service exposed via NodePort
+category: networking
+dimension: exposure
+severity: medium
+description: >
+  A Service is of type NodePort, opening a port on every node in the
+  cluster that routes to it.
+selector:
+  kinds: [Service]
+conditions:
+  - field: type
+    operator: equals
+    value: NodePort
+risk_rationale: >
+  A NodePort is reachable on every node's IP, not just through whatever
+  ingress or load balancer the rest of the cluster's traffic goes through.
+  If any node has a public IP or sits on a network segment broader than
+  intended, this Service is reachable there too, often without the same
+  logging, rate limiting, or WAF coverage that fronts the cluster's normal
+  ingress path.
+remediation: |
+  Route external traffic through an Ingress controller or a LoadBalancer
+  Service instead, and use NodePort only when a specific operational
+  reason requires it.
+references:
+  - https://kubernetes.io/docs/concepts/services-networking/service/#nodeport

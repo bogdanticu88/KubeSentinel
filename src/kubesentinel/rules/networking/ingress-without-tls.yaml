@@ -1,0 +1,27 @@
+id: KS-NET-004
+name: Ingress without TLS
+category: networking
+dimension: exposure
+severity: high
+description: >
+  An Ingress resource defines no tls section, so traffic to it is served
+  over plain HTTP.
+selector:
+  kinds: [Ingress]
+conditions:
+  - field: tls
+    operator: not_exists
+risk_rationale: >
+  Traffic to an Ingress without TLS travels in the clear between the
+  client and wherever TLS is (or is not) terminated. That includes
+  session cookies, auth tokens, and request bodies. Anyone positioned to
+  observe the network path, which for a public Ingress can mean anyone on
+  the path between the client and the cluster, can read or tamper with
+  that traffic.
+remediation: |
+  spec:
+    tls:
+      - hosts: ["example.com"]
+        secretName: example-com-tls
+references:
+  - https://kubernetes.io/docs/concepts/services-networking/ingress/#tls

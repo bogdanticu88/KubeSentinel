@@ -1,0 +1,27 @@
+id: KS-NET-002
+name: Service exposed via LoadBalancer
+category: networking
+dimension: exposure
+severity: medium
+description: >
+  A Service is of type LoadBalancer, which most cloud providers wire up to
+  a public, internet-reachable IP by default.
+selector:
+  kinds: [Service]
+conditions:
+  - field: type
+    operator: equals
+    value: LoadBalancer
+risk_rationale: >
+  This finding is not saying the exposure is wrong, plenty of services are
+  meant to be public. It is flagging that this workload is now part of
+  the cluster's actual attack surface and needs to be judged that way:
+  every misconfiguration on the workload behind this Service, and every
+  RBAC permission its ServiceAccount holds, is reachable from outside the
+  cluster the moment this Service exists, not just from inside it.
+remediation: |
+  Confirm this Service is meant to be internet-facing. If it is only
+  meant for internal traffic, use type ClusterIP instead, or restrict the
+  load balancer with loadBalancerSourceRanges.
+references:
+  - https://kubernetes.io/docs/concepts/services-networking/service/#loadbalancer

@@ -1,0 +1,26 @@
+id: KS-WORKLOAD-006
+name: Pod uses the host process namespace
+category: workloads
+dimension: workloads
+severity: critical
+description: >
+  A workload sets hostPID to true, letting its containers see and signal
+  every process running on the node.
+selector:
+  kinds: [Pod, Deployment, StatefulSet, DaemonSet, Job, CronJob]
+conditions:
+  - field: hostPID
+    operator: equals
+    value: true
+risk_rationale: >
+  With hostPID enabled, a process in the container can see the full
+  process list of the node, including other workloads' processes, and can
+  reach into their /proc entries for environment variables, open file
+  descriptors, and memory maps. Combined with a capability like
+  SYS_PTRACE this is often enough to fully compromise other workloads on
+  the same node.
+remediation: |
+  spec:
+    hostPID: false
+references:
+  - https://kubernetes.io/docs/concepts/security/pod-security-standards/

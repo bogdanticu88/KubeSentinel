@@ -1,0 +1,39 @@
+id: KS-WORKLOAD-004
+name: Dangerous Linux capability added
+category: workloads
+dimension: workloads
+severity: critical
+description: >
+  A container adds a Linux capability known to allow container breakout or
+  host tampering, such as SYS_ADMIN or SYS_MODULE.
+selector:
+  kinds: [Pod, Deployment, StatefulSet, DaemonSet, Job, CronJob]
+conditions:
+  - field: containers[].securityContext.capabilities.add
+    operator: intersects
+    value:
+      - ALL
+      - SYS_ADMIN
+      - SYS_MODULE
+      - SYS_PTRACE
+      - SYS_BOOT
+      - SYS_RAWIO
+      - NET_ADMIN
+      - NET_RAW
+      - DAC_READ_SEARCH
+      - DAC_OVERRIDE
+risk_rationale: >
+  These capabilities individually grant enough power to bypass file
+  permission checks, load kernel modules, trace and manipulate arbitrary
+  processes on the node, or manipulate raw network traffic. Adding any of
+  them narrows the gap between "container process" and "root on the node"
+  to whatever bug an attacker can find, rather than requiring a kernel
+  exploit first.
+remediation: |
+  securityContext:
+    capabilities:
+      drop: ["ALL"]
+      # add back only what the workload actually needs, one at a time
+references:
+  - https://man7.org/linux/man-pages/man7/capabilities.7.html
+  - https://kubernetes.io/docs/tasks/configure-pod-container/security-context/

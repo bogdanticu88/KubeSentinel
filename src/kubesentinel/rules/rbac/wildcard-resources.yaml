@@ -1,0 +1,28 @@
+id: KS-RBAC-001
+name: Wildcard resources in a Role or ClusterRole
+category: rbac
+dimension: identity
+severity: high
+description: >
+  A Role or ClusterRole grants access to all resource types with a
+  wildcard instead of naming what it actually needs.
+selector:
+  kinds: [Role, ClusterRole]
+conditions:
+  - field: rules[].resources
+    operator: contains
+    value: "*"
+risk_rationale: >
+  A wildcard resource grant means every service account bound to this
+  role can act on any resource type in whatever API groups the rule
+  covers, including ones that do not exist yet. New CRDs, secrets,
+  and future resource types are all in scope automatically the moment
+  they show up, with nobody having reviewed whether this role should
+  have touched them.
+remediation: |
+  rules:
+    - apiGroups: [""]
+      resources: ["configmaps"]   # name only what this workload actually needs
+      verbs: ["get", "list"]
+references:
+  - https://kubernetes.io/docs/reference/access-authn-authz/rbac/

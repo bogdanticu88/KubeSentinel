@@ -1,0 +1,25 @@
+id: KS-WORKLOAD-003
+name: Privilege escalation not disabled
+category: workloads
+dimension: workloads
+severity: high
+description: >
+  A container does not set allowPrivilegeEscalation to false. The
+  Kubernetes default for this field is true.
+selector:
+  kinds: [Pod, Deployment, StatefulSet, DaemonSet, Job, CronJob]
+conditions:
+  - field: containers[].securityContext.allowPrivilegeEscalation
+    operator: not_equals
+    value: false
+risk_rationale: >
+  With allowPrivilegeEscalation left at its default, a process inside the
+  container can gain more privileges than its parent through setuid
+  binaries or extra capabilities picked up at exec time. Disabling it is a
+  cheap, no-downside control that closes off a whole class of local
+  escalation inside the container.
+remediation: |
+  securityContext:
+    allowPrivilegeEscalation: false
+references:
+  - https://kubernetes.io/docs/concepts/security/pod-security-standards/

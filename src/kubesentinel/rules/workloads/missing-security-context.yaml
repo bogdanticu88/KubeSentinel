@@ -1,0 +1,30 @@
+id: KS-WORKLOAD-009
+name: Container has no securityContext
+category: workloads
+dimension: workloads
+severity: medium
+description: >
+  A container defines no securityContext at all, so it inherits whatever
+  the image and the container runtime default to.
+selector:
+  kinds: [Pod, Deployment, StatefulSet, DaemonSet, Job, CronJob]
+conditions:
+  - field: containers[].securityContext
+    operator: not_exists
+risk_rationale: >
+  An unset securityContext is not neutral, it means every hardening
+  setting KubeSentinel checks for elsewhere (privilege escalation, root,
+  capabilities, a read-only filesystem) is left at whatever the image
+  author or the cluster's defaults chose, which is usually the least
+  restrictive option. This is lower severity on its own than the specific
+  settings it leaves unmanaged, but it is usually the reason those other
+  findings exist in the first place.
+remediation: |
+  securityContext:
+    runAsNonRoot: true
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    capabilities:
+      drop: ["ALL"]
+references:
+  - https://kubernetes.io/docs/tasks/configure-pod-container/security-context/

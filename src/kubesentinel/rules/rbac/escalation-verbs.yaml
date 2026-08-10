@@ -1,0 +1,31 @@
+id: KS-RBAC-004
+name: RBAC escalation verb granted
+category: rbac
+dimension: identity
+severity: critical
+description: >
+  A Role or ClusterRole grants the escalate, bind, or impersonate verb,
+  each of which lets its holder acquire permissions beyond what the role
+  itself lists.
+selector:
+  kinds: [Role, ClusterRole]
+conditions:
+  - field: rules[].verbs
+    operator: intersects
+    value: [escalate, bind, impersonate]
+risk_rationale: >
+  These three verbs are privilege escalation primitives built into RBAC
+  itself, not incidental over-permissioning. escalate lets a holder edit
+  roles to grant themselves more access than the role they started with.
+  bind lets a holder attach any ClusterRole to a RoleBinding, including
+  cluster-admin, as long as they can reference it. impersonate lets a
+  holder act as any other user, group, or service account, which
+  sidesteps RBAC entirely for whatever identity gets impersonated. Any of
+  these on a workload identity is a direct path from "this pod is
+  compromised" to "this cluster is compromised".
+remediation: |
+  Remove escalate, bind, and impersonate unless a specific, reviewed
+  controller genuinely needs one of them, and scope it to a Role in a
+  single namespace rather than a ClusterRole whenever possible.
+references:
+  - https://kubernetes.io/docs/reference/access-authn-authz/rbac/#privilege-escalation-prevention-and-bootstrapping

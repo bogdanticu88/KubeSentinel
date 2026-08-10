@@ -1,0 +1,28 @@
+id: KS-RBAC-003
+name: Wildcard API groups in a Role or ClusterRole
+category: rbac
+dimension: identity
+severity: medium
+description: >
+  A Role or ClusterRole grants access across every API group instead of
+  naming the ones it actually uses.
+selector:
+  kinds: [Role, ClusterRole]
+conditions:
+  - field: rules[].apiGroups
+    operator: contains
+    value: "*"
+risk_rationale: >
+  Kubernetes API groups separate core resources, apps workloads, RBAC
+  objects, networking, and every CRD-provided API from each other. A
+  wildcard apiGroups entry collapses that separation, so this role reaches
+  into groups nobody reviewing it for its original purpose would have
+  expected, including RBAC itself if the resource and verb wildcards line
+  up.
+remediation: |
+  rules:
+    - apiGroups: ["apps"]
+      resources: ["deployments"]
+      verbs: ["get", "list"]
+references:
+  - https://kubernetes.io/docs/reference/access-authn-authz/rbac/
