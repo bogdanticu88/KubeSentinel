@@ -51,11 +51,14 @@ def _evaluate_resource_match(
         return []
 
     kinds = set(rule.selector.kinds)
+    match_labels = rule.selector.match_labels
     findings = []
     for resource in resources:
         if resource.kind not in kinds:
             continue
         if _is_kubernetes_bootstrapped(resource):
+            continue
+        if match_labels and not match_labels.items() <= resource.labels.items():
             continue
         if all(evaluate_condition(resource.data, condition) for condition in rule.conditions):
             matched_fields = {

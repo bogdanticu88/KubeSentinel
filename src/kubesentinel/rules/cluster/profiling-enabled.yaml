@@ -1,0 +1,30 @@
+id: KS-CLUSTER-002
+name: API server profiling enabled
+category: cluster
+dimension: configuration
+severity: low
+description: >
+  The kube-apiserver command line explicitly sets --profiling=true, which
+  exposes Go's pprof debug endpoints.
+selector:
+  kinds: [Pod]
+  match_labels:
+    component: kube-apiserver
+    tier: control-plane
+conditions:
+  - field: containers[].command[]
+    operator: equals
+    value: "--profiling=true"
+risk_rationale: >
+  The pprof endpoints were built for debugging a running process, not for
+  production exposure. They can reveal internal implementation details and
+  add extra HTTP surface on the API server that has nothing to do with
+  serving the Kubernetes API, for a benefit (live profiling) that is rarely
+  needed outside active incident response.
+remediation: |
+  Remove --profiling=true from the kube-apiserver command line, or set it
+  to false explicitly, and enable it only temporarily while debugging a
+  specific performance issue.
+references:
+  - https://kubernetes.io/docs/reference/access-authn-authz/webhook/
+  - https://pkg.go.dev/net/http/pprof

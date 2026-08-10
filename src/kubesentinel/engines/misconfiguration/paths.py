@@ -16,11 +16,12 @@ def resolve(data: dict[str, Any], field_path: str) -> list[Any]:
     """Resolve a dotted path against a dict.
 
     A path segment suffixed with [] iterates a list, contributing one
-    resolved value per element rather than the list itself. Only one such
-    segment is supported per path, that is enough for every rule shipped
-    today. A path through a missing key resolves to no values at all, which
-    condition evaluation treats as "the field is absent" rather than an
-    error, since most of these fields are optional in the Kubernetes API.
+    resolved value per element rather than the list itself, and a path can
+    chain more than one such segment, "containers[].command[]" resolves to
+    every argument of every container. A path through a missing key resolves
+    to no values at all, which condition evaluation treats as "the field is
+    absent" rather than an error, since most of these fields are optional in
+    the Kubernetes API.
     """
     values: list[Any] = [data]
 

@@ -46,6 +46,8 @@ def pod(
     host_ipc: bool = False,
     volumes: list[dict[str, Any]] | None = None,
     service_account_name: str | None = None,
+    automount_service_account_token: bool | None = None,
+    labels: dict[str, str] | None = None,
 ) -> CollectedResource:
     spec: dict[str, Any] = {
         "containers": containers if containers is not None else [{"name": "app", "image": "app:1.0"}],
@@ -57,7 +59,9 @@ def pod(
         spec["volumes"] = volumes
     if service_account_name is not None:
         spec["serviceAccountName"] = service_account_name
-    return build_resource("Pod", name, {"spec": spec}, namespace=namespace)
+    if automount_service_account_token is not None:
+        spec["automountServiceAccountToken"] = automount_service_account_token
+    return build_resource("Pod", name, {"spec": spec}, namespace=namespace, labels=labels)
 
 
 def deployment(

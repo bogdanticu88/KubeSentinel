@@ -20,10 +20,11 @@ class RuleCondition(BaseModel):
     """A single check against a resource's normalized data.
 
     `field` is a dotted path such as "containers[].securityContext.privileged".
-    A segment suffixed with [] iterates a list, only one such segment is
-    supported per path, which covers every rule in the current set. When a
-    path resolves to several values, `quantifier` decides whether the
-    condition needs to hold for at least one of them or for all of them.
+    A segment suffixed with [] iterates a list, and a path can chain more
+    than one of these, "containers[].command[]" resolves to every argument
+    of every container. When a path resolves to several values, `quantifier`
+    decides whether the condition needs to hold for at least one of them or
+    for all of them.
     """
 
     field: str
@@ -34,6 +35,10 @@ class RuleCondition(BaseModel):
 
 class RuleSelector(BaseModel):
     kinds: list[str] = Field(default_factory=list)
+    # A resource must carry every key/value pair here to match, same
+    # equality-AND semantics as a Kubernetes matchLabels selector. Empty
+    # means no label restriction, matching by kind alone.
+    match_labels: dict[str, str] = Field(default_factory=dict)
 
 
 class Rule(BaseModel):

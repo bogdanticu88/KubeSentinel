@@ -1,0 +1,32 @@
+id: KS-CLUSTER-001
+name: API server anonymous authentication not explicitly disabled
+category: cluster
+dimension: configuration
+severity: medium
+description: >
+  The kube-apiserver command line does not include --anonymous-auth=false,
+  and anonymous authentication defaults to enabled when the flag is absent.
+selector:
+  kinds: [Pod]
+  match_labels:
+    component: kube-apiserver
+    tier: control-plane
+conditions:
+  - field: containers[].command[]
+    operator: not_equals
+    value: "--anonymous-auth=false"
+    quantifier: all
+risk_rationale: >
+  With anonymous authentication enabled, requests that present no
+  credentials at all still reach the API server as the system:anonymous
+  user in the system:unauthenticated group, rather than being rejected
+  outright. Most clusters keep this safe only because no RBAC binding
+  grants that group anything, which means the actual protection here is
+  "nobody has misconfigured RBAC yet" rather than "unauthenticated
+  requests are refused". Disabling it removes that dependency entirely.
+remediation: |
+  Add --anonymous-auth=false to the kube-apiserver command line and confirm
+  nothing in the cluster (health checks, unauthenticated readiness probes)
+  was relying on anonymous access first.
+references:
+  - https://kubernetes.io/docs/reference/access-authn-authz/authentication/#anonymous-requests

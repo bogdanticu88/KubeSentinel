@@ -33,6 +33,23 @@ def test_resolve_array_of_non_dicts_for_contains_style_use():
     assert resolve(data, "rules[].resources") == [["pods", "*"]]
 
 
+def test_resolve_chains_more_than_one_array_segment():
+    # containers[].command[] needs to un-nest twice: once over the container
+    # list, once over each container's own argument list.
+    data = {
+        "containers": [
+            {"command": ["kube-apiserver", "--anonymous-auth=true"]},
+            {"command": ["sidecar", "--profiling=true"]},
+        ]
+    }
+    assert resolve(data, "containers[].command[]") == [
+        "kube-apiserver",
+        "--anonymous-auth=true",
+        "sidecar",
+        "--profiling=true",
+    ]
+
+
 def test_resolve_missing_array_key_returns_empty():
     assert resolve({}, "containers[].name") == []
 

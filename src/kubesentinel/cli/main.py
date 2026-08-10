@@ -44,7 +44,7 @@ def scan(
 
     cluster_name = current_context_name(context)
     findings = evaluate(collection.resources, rules, cluster_name)
-    score_result = score(findings)
+    score_result = score(findings, rules)
 
     result = ScanResult(
         cluster=ClusterInfo(

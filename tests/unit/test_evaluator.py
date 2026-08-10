@@ -2,6 +2,7 @@ import pytest
 
 from kubesentinel.engines.misconfiguration.evaluator import evaluate
 from kubesentinel.engines.misconfiguration.loader import load_rules
+from kubesentinel.models.rule import Rule
 from tests.fixtures import builders
 
 
@@ -47,6 +48,31 @@ def test_full_rule_set_against_a_small_synthetic_cluster():
     assert "KS-NET-002" in fired_rule_ids
     assert "KS-NET-001" in fired_rule_ids
     assert all(f.cluster == "kind-local" for f in findings)
+
+
+def test_match_labels_selector_requires_every_label_to_be_present():
+    rule = Rule(
+        id="KS-TEST-LABELS",
+        name="test label selector",
+        category="test",
+        dimension="configuration",
+        severity="low",
+        description="test",
+        selector={"kinds": ["Pod"], "match_labels": {"component": "kube-apiserver"}},
+        conditions=[{"field": "hostNetwork", "operator": "exists"}],
+        risk_rationale="test",
+        remediation="test",
+    )
+
+    matching = builders.pod(labels={"component": "kube-apiserver", "tier": "control-plane"})
+    extra_labels_still_match = builders.pod(labels={"component": "kube-apiserver", "extra": "label"})
+    missing_label = builders.pod(labels={"tier": "control-plane"})
+    no_labels = builders.pod()
+
+    assert len(evaluate([matching], [rule], cluster_name="test")) == 1
+    assert len(evaluate([extra_labels_still_match], [rule], cluster_name="test")) == 1
+    assert evaluate([missing_label], [rule], cluster_name="test") == []
+    assert evaluate([no_labels], [rule], cluster_name="test") == []
 
 
 def test_evaluator_rejects_an_unknown_rule_type():
