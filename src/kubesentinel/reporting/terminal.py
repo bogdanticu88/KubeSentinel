@@ -27,17 +27,19 @@ def render(result: ScanResult, console: Console | None = None) -> None:
     console.print(f"NetworkPolicies:  {counts.network_policies}")
     console.print()
 
-    severity_counts = {severity: 0 for severity in SEVERITY_ORDER}
+    # Counted and ranked by risk, not raw severity, a critical CVE the
+    # correlation engine downgraded to HIGH belongs in the HIGH bucket.
+    risk_counts = {risk: 0 for risk in SEVERITY_ORDER}
     for finding in result.findings:
-        severity_counts[finding.severity] += 1
+        risk_counts[finding.risk] += 1
 
     console.print("[bold]Findings[/bold]")
     console.print("-" * 32)
-    for severity in SEVERITY_ORDER:
-        console.print(f"{severity.upper():<10} {severity_counts[severity]}")
+    for risk in SEVERITY_ORDER:
+        console.print(f"{risk.upper():<10} {risk_counts[risk]}")
     console.print()
 
-    top_risks = sorted(result.findings, key=lambda f: SEVERITY_ORDER.index(f.severity))[:5]
+    top_risks = sorted(result.findings, key=lambda f: SEVERITY_ORDER.index(f.risk))[:5]
     if top_risks:
         console.print("[bold]Top risks[/bold]")
         console.print()
@@ -45,13 +47,15 @@ def render(result: ScanResult, console: Console | None = None) -> None:
             location = finding.resource
             if finding.namespace:
                 location = f"{finding.namespace}/{finding.resource}"
-            console.print(f"[{finding.severity.upper()}] {location}")
+            console.print(f"[{finding.risk.upper()}] {location}")
             console.print(f"  {finding.title}")
+            if finding.risk != finding.severity and finding.risk_reasons:
+                console.print(f"  {finding.risk_reasons[0]}")
         console.print()
 
     console.print("[bold]Security posture[/bold]")
     for dimension in result.score.dimensions:
-        label = dimension.name.capitalize()
+        label = dimension.name.replace("_", " ").capitalize()
         value = "n/a" if dimension.score is None else str(dimension.score)
         console.print(f"  {label:<15} {value}")
     console.print()

@@ -127,6 +127,7 @@ def _finding(
         category=rule.category,
         dimension=rule.dimension,
         severity=rule.severity,
+        risk=rule.severity,
         cluster=cluster_name,
         namespace=namespace,
         resource=resource_name,

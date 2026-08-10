@@ -5,7 +5,7 @@ from kubesentinel.models.finding import Evidence, Finding
 from kubesentinel.models.rule import Rule
 
 
-def _finding(dimension: str, severity: str) -> Finding:
+def _finding(dimension: str, severity: str, risk: str | None = None) -> Finding:
     now = datetime.now(UTC)
     return Finding(
         id=f"KS-{dimension}-{severity}",
@@ -13,6 +13,7 @@ def _finding(dimension: str, severity: str) -> Finding:
         category="test",
         dimension=dimension,
         severity=severity,
+        risk=risk if risk is not None else severity,
         cluster="test",
         namespace="default",
         resource="app",
@@ -102,3 +103,28 @@ def test_a_finding_on_a_covered_dimension_is_scored():
     result = score([_finding("configuration", "high")], [_rule("configuration")])
     configuration = next(d for d in result.dimensions if d.name == "configuration")
     assert configuration.score == 100 - 12
+
+
+def test_scoring_uses_risk_not_raw_severity():
+    # A critical CVE that correlation downgraded to a HIGH risk should cost
+    # a HIGH penalty, not a CRITICAL one, scoring reflects context, not the
+    # vendor's untouched rating.
+    downgraded = _finding("supply_chain", severity="critical", risk="high")
+    result = score([downgraded], [_rule("supply_chain")])
+    supply_chain = next(d for d in result.dimensions if d.name == "supply_chain")
+    assert supply_chain.score == 100 - 12
+    assert supply_chain.reasons[0].startswith("HIGH")
+
+
+def test_supply_chain_needs_explicit_coverage_no_rule_ever_targets_it():
+    # No misconfiguration rule has dimension=supply_chain, its findings come
+    # from a scanner adapter, so rule-derived coverage alone would always
+    # report it as unavailable even when a scan actually ran and found
+    # nothing wrong.
+    without_scan = score([], RULES)
+    supply_chain = next(d for d in without_scan.dimensions if d.name == "supply_chain")
+    assert supply_chain.score is None
+
+    with_clean_scan = score([], RULES, extra_covered_dimensions={"supply_chain"})
+    supply_chain = next(d for d in with_clean_scan.dimensions if d.name == "supply_chain")
+    assert supply_chain.score == 100

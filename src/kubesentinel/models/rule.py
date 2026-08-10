@@ -7,7 +7,9 @@ Severity = Literal["critical", "high", "medium", "low"]
 # Which score dimension a rule's findings count against. Set explicitly per
 # rule rather than inferred from category, so scoring stays honest about
 # what it actually measured.
-Dimension = Literal["workloads", "identity", "networking", "exposure", "configuration"]
+Dimension = Literal[
+    "workloads", "identity", "networking", "exposure", "configuration", "supply_chain"
+]
 
 ConditionOperator = Literal[
     "equals", "not_equals", "exists", "not_exists", "in", "not_in", "contains", "intersects"

@@ -68,9 +68,16 @@ def deployment(
     name: str = "test-deployment",
     namespace: str = "default",
     containers: list[dict[str, Any]] | None = None,
+    pod_labels: dict[str, str] | None = None,
+    service_account_name: str | None = None,
 ) -> CollectedResource:
-    pod_spec = {"containers": containers if containers is not None else [{"name": "app"}]}
-    spec = {"template": {"spec": pod_spec}}
+    pod_spec: dict[str, Any] = {"containers": containers if containers is not None else [{"name": "app"}]}
+    if service_account_name is not None:
+        pod_spec["serviceAccountName"] = service_account_name
+    template: dict[str, Any] = {"spec": pod_spec}
+    if pod_labels is not None:
+        template["metadata"] = {"labels": pod_labels}
+    spec = {"template": template}
     return build_resource("Deployment", name, {"spec": spec}, namespace=namespace)
 
 
@@ -100,10 +107,12 @@ def role_binding(
     namespace: str = "default",
     subjects: list[dict[str, Any]] | None = None,
     kind: str = "RoleBinding",
+    role_ref_kind: str = "Role",
+    role_ref_name: str = "test-role",
 ) -> CollectedResource:
     body = {
         "subjects": subjects if subjects is not None else [],
-        "roleRef": {"kind": "Role", "name": "test-role"},
+        "roleRef": {"kind": role_ref_kind, "name": role_ref_name},
     }
     return build_resource(kind, name, body, namespace=namespace)
 
@@ -112,18 +121,25 @@ def service(
     name: str = "test-service",
     namespace: str = "default",
     service_type: str = "ClusterIP",
+    selector: dict[str, str] | None = None,
 ) -> CollectedResource:
-    return build_resource("Service", name, {"spec": {"type": service_type}}, namespace=namespace)
+    spec: dict[str, Any] = {"type": service_type}
+    if selector is not None:
+        spec["selector"] = selector
+    return build_resource("Service", name, {"spec": spec}, namespace=namespace)
 
 
 def ingress(
     name: str = "test-ingress",
     namespace: str = "default",
     tls: list[dict[str, Any]] | None = None,
+    rules: list[dict[str, Any]] | None = None,
 ) -> CollectedResource:
     spec: dict[str, Any] = {}
     if tls is not None:
         spec["tls"] = tls
+    if rules is not None:
+        spec["rules"] = rules
     return build_resource("Ingress", name, {"spec": spec}, namespace=namespace)
 
 

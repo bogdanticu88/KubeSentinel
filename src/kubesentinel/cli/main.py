@@ -10,8 +10,11 @@ from kubesentinel.collector.collector import collect
 from kubesentinel.collector.errors import CollectorError
 from kubesentinel.engines.misconfiguration.evaluator import evaluate
 from kubesentinel.engines.misconfiguration.loader import RuleLoadError, load_rules
+from kubesentinel.engines.risk.correlation import correlate
 from kubesentinel.engines.risk.scoring import score
-from kubesentinel.models.scan import ClusterInfo, ScanResult
+from kubesentinel.engines.vulnerability.adapter import TrivyAdapter
+from kubesentinel.engines.vulnerability.scan import scan_vulnerabilities
+from kubesentinel.models.scan import ClusterInfo, CollectionWarning, ScanResult
 from kubesentinel.reporting import terminal
 
 app = typer.Typer(add_completion=False, no_args_is_help=True)
@@ -28,6 +31,11 @@ def scan(
     context: str = typer.Option(None, "--context", help="kubeconfig context to scan"),
     namespace: str = typer.Option(None, "--namespace", help="limit the scan to a single namespace"),
     output: str = typer.Option("terminal", "--output", "-o", help="terminal or json"),
+    with_vulnerabilities: bool = typer.Option(
+        False,
+        "--with-vulnerabilities",
+        help="also scan workload images for known CVEs using Trivy, requires trivy on PATH",
+    ),
 ) -> None:
     """Scan a cluster's current security posture and print a scored report."""
     try:
@@ -44,7 +52,30 @@ def scan(
 
     cluster_name = current_context_name(context)
     findings = evaluate(collection.resources, rules, cluster_name)
-    score_result = score(findings, rules)
+    warnings = list(collection.warnings)
+    covered_dimensions: set[str] = set()
+
+    if with_vulnerabilities:
+        adapter = TrivyAdapter()
+        if adapter.is_available():
+            vulnerability_findings, vulnerability_warnings = scan_vulnerabilities(
+                collection.resources, adapter, cluster_name
+            )
+            findings.extend(vulnerability_findings)
+            warnings.extend(vulnerability_warnings)
+            covered_dimensions.add("supply_chain")
+        else:
+            warnings.append(
+                CollectionWarning(
+                    resource_kind="Vulnerability",
+                    message="trivy is not installed or not on PATH, vulnerability scanning skipped",
+                )
+            )
+
+    # Correlation always runs, it is local and deterministic, no reason to
+    # gate it behind the same flag that gates talking to an external scanner.
+    findings = correlate(findings, collection.resources)
+    score_result = score(findings, rules, extra_covered_dimensions=covered_dimensions)
 
     result = ScanResult(
         cluster=ClusterInfo(
@@ -56,7 +87,7 @@ def scan(
         counts=collection.counts,
         findings=findings,
         score=score_result,
-        warnings=collection.warnings,
+        warnings=warnings,
     )
 
     if output == "json":
