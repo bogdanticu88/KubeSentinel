@@ -35,13 +35,35 @@ will eventually end up.
       kube-apiserver are owned by the Node, not a controller, and are
       unaffected.
 
-## Phase 3: Baseline and drift
+## Phase 3: Baseline and drift (done)
 
-- [ ] Baseline definition and storage (generated, hand-authored, or imported)
-- [ ] Snapshot storage, event-sourced: one full snapshot plus an append-only
-      drift-event log rather than a full copy per point in time
-- [ ] Severity-weighted structural diff engine, baseline vs. current state
-- [ ] `kubesentinel drift` and `kubesentinel baseline`
+- [x] Snapshot storage. Local SQLite, one file under `~/.kubesentinel/`, not
+      Postgres, deliberate deviation from the original tech stack, this is a
+      CLI one operator runs from a laptop, not a server with concurrent
+      writers, so a local file fits better than standing up a database.
+- [x] Baseline is the reference snapshot for its cluster, `kubesentinel
+      baseline create` (auto-generated from a live scan) or `baseline show`.
+      Hand-authored and imported baselines from the original design are not
+      built, auto-generated from a snapshot covers the common case and a
+      full policy-authoring format would mostly duplicate what the
+      misconfiguration rules already check.
+- [x] Full snapshots per capture rather than an event-sourced replay log,
+      revised from the original plan once the numbers were actually looked
+      at: a local CLI doing periodic manual snapshots was never going to hit
+      the storage volume that made replay worth its complexity.
+- [x] Structural diff engine comparing the same normalized `data` every rule
+      already reads, so every field difference found is inherently something
+      a rule could care about, with a per-field severity table for how much a
+      given change matters (ServiceAccount or hostNetwork changing outranks
+      a label). Finding-level new/resolved plus score delta, matching the
+      original design brief's worked example exactly.
+- [x] `kubesentinel drift` (fresh scan vs. baseline or `--since 7d/24h/30m`)
+      and `kubesentinel compare <id> <id>` (two stored snapshots, fully
+      offline, no cluster needed).
+- [x] Verified against the same kind cluster: patched a live Deployment's
+      ServiceAccount and privileged flag, confirmed drift caught both, the
+      score moved the right direction, and compare against stored snapshot
+      ids reproduced the identical report with no cluster connection at all.
 
 ## Phase 4: Auditing
 

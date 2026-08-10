@@ -3,6 +3,7 @@ from datetime import datetime
 from pydantic import BaseModel, Field
 
 from kubesentinel.models.finding import Finding
+from kubesentinel.models.resource import CollectedResource
 
 
 class ClusterInfo(BaseModel):
@@ -43,4 +44,26 @@ class ScanResult(BaseModel):
     counts: ResourceCounts
     findings: list[Finding] = Field(default_factory=list)
     score: ScoreResult
+    warnings: list[CollectionWarning] = Field(default_factory=list)
+
+
+class Snapshot(BaseModel):
+    """A scan result persisted to local storage, resources included.
+
+    ScanResult is what a single `scan` prints, a Snapshot is what `snapshot`
+    keeps around afterward so drift and compare have something to diff
+    against. It carries the raw resource list too, ScanResult does not,
+    that is what a structural diff needs and findings alone cannot give it.
+    """
+
+    id: int | None = None
+    cluster: str
+    taken_at: datetime
+    is_baseline: bool = False
+    kubernetes_version: str | None = None
+    node_count: int = 0
+    resources: list[CollectedResource] = Field(default_factory=list)
+    findings: list[Finding] = Field(default_factory=list)
+    score: ScoreResult
+    counts: ResourceCounts
     warnings: list[CollectionWarning] = Field(default_factory=list)

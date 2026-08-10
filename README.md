@@ -13,12 +13,14 @@ findings, it will never be the thing producing them.
 
 ## Status
 
-Early development. `kubesentinel scan` works end to end: connect to a cluster, collect
-security-relevant resources, run the misconfiguration rule set, optionally scan workload images
-for known vulnerabilities with Trivy, and print an explainable, risk-weighted score. Risk is
-adjusted from a finding's raw severity based on whether its workload is exposed and what its
-ServiceAccount can do, not just reported at face value. Baselines, drift detection, historical
-scoring, and the attack path graph come in later phases; see `docs/roadmap.md`.
+Early development. `kubesentinel scan` connects to a cluster, collects security-relevant
+resources, runs the misconfiguration rule set, optionally scans workload images for known
+vulnerabilities with Trivy, and prints an explainable, risk-weighted score. Risk is adjusted from
+a finding's raw severity based on whether its workload is exposed and what its ServiceAccount can
+do, not just reported at face value. `kubesentinel snapshot` saves a scan locally, `baseline` sets
+one as the reference point, and `drift` or `compare` show what changed since then and how much it
+moved the score. The attack path graph and scheduled auditing come in later phases; see
+`docs/roadmap.md`.
 
 ## Why this exists
 
@@ -57,6 +59,32 @@ misconfiguration engine should ever require.
 ```bash
 kubesentinel scan --with-vulnerabilities
 ```
+
+### Tracking drift over time
+
+`scan` is stateless, it prints a report and forgets it. `snapshot` does the same scan but saves
+the result locally, so later runs have something to compare against.
+
+```bash
+kubesentinel baseline create --context kind-local   # scan now, set the result as the reference point
+kubesentinel drift --context kind-local             # scan again, compare against the baseline
+kubesentinel baseline show --context kind-local      # see what the current baseline looks like
+```
+
+`drift` always runs a fresh scan against the live cluster. Pass `--since 7d` (or `24h`, `30m`) to
+compare against the nearest saved snapshot from that far back instead of the baseline.
+
+`compare` works entirely offline, no cluster connection needed, it just diffs two snapshots
+already sitting in local storage by id:
+
+```bash
+kubesentinel snapshot --context kind-local   # prints "Snapshot #12 saved..."
+kubesentinel compare 9 12
+```
+
+Snapshots live in a local SQLite database, one file, no server, under
+`~/.kubesentinel/kubesentinel.db` by default. Set `KUBESENTINEL_HOME` to point storage somewhere
+else, mainly useful for tests or a CI job that wants its own throwaway state directory.
 
 ## Development
 
