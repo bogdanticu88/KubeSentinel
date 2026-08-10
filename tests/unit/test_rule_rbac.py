@@ -51,3 +51,26 @@ def test_default_serviceaccount_bound():
         "KS-RBAC-005",
         builders.role_binding(subjects=[{"kind": "ServiceAccount", "name": "default"}], kind="ClusterRoleBinding"),
     )
+
+
+def test_kubernetes_bootstrapped_clusterroles_are_excluded_from_rbac_findings():
+    # admin, edit, and the various system:* aggregation roles ship with every
+    # cluster and carry this label. Flagging them is not actionable, and a
+    # scan against a real kind cluster showed they otherwise drown out every
+    # finding an operator could actually do something about.
+    builtin_admin = builders.role(
+        name="admin",
+        kind="ClusterRole",
+        rules=[{"resources": ["*"], "verbs": ["*"], "apiGroups": ["*"]}],
+        labels={"kubernetes.io/bootstrapping": "rbac-defaults"},
+    )
+    assert not _fires("KS-RBAC-001", builtin_admin)
+    assert not _fires("KS-RBAC-002", builtin_admin)
+    assert not _fires("KS-RBAC-003", builtin_admin)
+
+    custom_role_same_rules = builders.role(
+        name="payments-broad-role",
+        kind="ClusterRole",
+        rules=[{"resources": ["*"], "verbs": ["*"], "apiGroups": ["*"]}],
+    )
+    assert _fires("KS-RBAC-001", custom_role_same_rules)

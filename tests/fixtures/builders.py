@@ -17,11 +17,12 @@ def build_resource(
     name: str,
     body: dict[str, Any],
     namespace: str | None = "default",
+    labels: dict[str, str] | None = None,
 ) -> CollectedResource:
     raw: dict[str, Any] = {
         "apiVersion": "v1",
         "kind": kind,
-        "metadata": {"name": name, "namespace": namespace},
+        "metadata": {"name": name, "namespace": namespace, "labels": labels or {}},
     }
     raw.update(body)
     data = normalize_resource(kind, raw)
@@ -30,6 +31,7 @@ def build_resource(
         api_version=raw["apiVersion"],
         name=name,
         namespace=namespace,
+        labels=labels or {},
         data=data,
         raw=raw,
     )
@@ -83,9 +85,10 @@ def role(
     namespace: str = "default",
     rules: list[dict[str, Any]] | None = None,
     kind: str = "Role",
+    labels: dict[str, str] | None = None,
 ) -> CollectedResource:
     body = {"rules": rules if rules is not None else []}
-    return build_resource(kind, name, body, namespace=namespace)
+    return build_resource(kind, name, body, namespace=namespace, labels=labels)
 
 
 def role_binding(

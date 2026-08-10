@@ -8,6 +8,19 @@ from kubesentinel.models.finding import Evidence, Finding
 from kubesentinel.models.resource import CollectedResource
 from kubesentinel.models.rule import Rule
 
+# Kubernetes stamps every RBAC object it ships by default (admin, edit, view,
+# the various system:* aggregation roles) with this label. Those objects are
+# not something a cluster operator configured, they exist on every cluster
+# the same way, so flagging them is not actionable and just buries findings
+# on RBAC an operator actually wrote. Confirmed against a real kind cluster,
+# a fixture-only test suite would not have caught this.
+_BOOTSTRAPPED_RBAC_LABEL_KEY = "kubernetes.io/bootstrapping"
+_BOOTSTRAPPED_RBAC_LABEL_VALUE = "rbac-defaults"
+
+
+def _is_kubernetes_bootstrapped(resource: CollectedResource) -> bool:
+    return resource.labels.get(_BOOTSTRAPPED_RBAC_LABEL_KEY) == _BOOTSTRAPPED_RBAC_LABEL_VALUE
+
 
 def evaluate(
     resources: list[CollectedResource],
@@ -41,6 +54,8 @@ def _evaluate_resource_match(
     findings = []
     for resource in resources:
         if resource.kind not in kinds:
+            continue
+        if _is_kubernetes_bootstrapped(resource):
             continue
         if all(evaluate_condition(resource.data, condition) for condition in rule.conditions):
             matched_fields = {
