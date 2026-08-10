@@ -4,7 +4,7 @@ KubeSentinel is being built in phases, each one a working increment rather than 
 speculative design. This file tracks where the project actually is, not where it
 will eventually end up.
 
-## Phase 1: Foundation (in progress)
+## Phase 1: Foundation (done)
 
 - [x] Repository structure, packaging, and tooling (ruff, mypy, pytest)
 - [x] Read-only Kubernetes collector: workloads, RBAC, networking, namespaces
@@ -13,17 +13,25 @@ will eventually end up.
       RBAC, and networking
 - [x] Dimensional, explainable security scoring
 - [x] `kubesentinel scan` command
-- [ ] Verified end to end against a real cluster (kind or k3d), not just fixtures
+- [x] Verified end to end against a real cluster (kind), not just fixtures
 
-## Phase 2: Security analysis
+## Phase 2: Security analysis (done)
 
-- [ ] Secrets-handling rules (mounted-but-unused, over-shared secrets)
-- [ ] Cluster-configuration rules (API server flags, admission control, where
-      the API allows reading them)
-- [ ] Vulnerability scanner adapter (Trivy first), normalized into the same
-      finding model as the misconfiguration rules
-- [ ] Correlate vulnerability findings with exposure and RBAC context rather
-      than reporting CVEs in isolation
+- [x] Secrets-handling rules (env-based secret consumption, automount not
+      disabled)
+- [x] Cluster-configuration rules (kube-apiserver command-line flags, read
+      from the static pod's own spec, no extra API access required)
+- [x] Vulnerability scanner adapter (Trivy), normalized into the same
+      finding model as the misconfiguration rules, opt-in via
+      `--with-vulnerabilities`
+- [x] Correlate vulnerability findings, and workload misconfiguration
+      findings, with exposure and RBAC context rather than reporting them
+      in isolation. Reproduces both worked risk examples from the original
+      design brief exactly.
+- [ ] Not yet done: dedup a Pod's findings against its owning Deployment,
+      currently both get flagged separately for the same thing since they
+      are genuinely separate API objects. Needs an owner-reference
+      correlation pass, likely folded into the Phase 3 or Phase 5 work.
 
 ## Phase 3: Baseline and drift
 
