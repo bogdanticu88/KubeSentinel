@@ -135,9 +135,40 @@ will eventually end up.
 
 - [ ] Dashboard, findings explorer, drift view, audit history, attack path graph
 
-## Phase 7: Integrations
+## Phase 7: Integrations (done)
 
-- [ ] GitHub, Azure DevOps, Jira, ServiceNow, ArgoCD, Flux
+- [x] `kubesentinel ticket`: files open findings, at or above `--min-risk`, into GitHub, Jira,
+      ServiceNow, or Azure DevOps. A shared `Ticketer` protocol and shared title/body formatting
+      live in `integrations/ticketer.py`, each system is one small adapter on top of that, not
+      four independent implementations of the same formatting logic.
+- [x] GitHub via the `gh` CLI, mirroring how `TrivyAdapter` shells out to `trivy`: reuses whatever
+      `gh auth login` session is already active rather than asking KubeSentinel to hold its own
+      GitHub credentials. The only one of the four verified against something real, `gh` was
+      already authenticated in the dev environment.
+- [x] Jira (REST API v2, plain-text description rather than v3's Atlassian Document Format),
+      ServiceNow (Table API, POST to `/api/now/table/incident`), and Azure DevOps (Work Items API,
+      JSON Patch body, personal access token auth), each built directly against its own public,
+      documented API. None of the three were verified against a live instance, no credentials were
+      available to test against one. Tests cover request shape and response handling with a mocked
+      `requests.post`, not a live round trip, called out explicitly rather than left implicit.
+- [x] A finding already filed against a given tracker is skipped on a later run rather than
+      refiled, tracked in a small local `filed_tickets` table keyed on the finding's own
+      deterministic id plus which tracker it went to, so `ticket` is safe to run on a schedule.
+- [x] `kubesentinel gitops`: reads the tracking labels ArgoCD (`argocd.argoproj.io/instance`) and
+      Flux (`kustomize.toolkit.fluxcd.io/name`, `helm.toolkit.fluxcd.io/name` as a fallback for a
+      HelmRelease with pruning or drift detection on) already stamp onto everything they manage,
+      off data `scan` already collects, no new permissions needed. When `ticket` files a finding
+      for a GitOps-managed resource, the ticket says so and points at the source repository
+      instead of a direct cluster edit, which would just drift and get reverted on the next sync.
+- [x] Verified against the same kind cluster: `kubesentinel gitops` correctly showed all nine
+      collected workloads as unmanaged before any labels were present, then a live
+      `kubectl label` adding `argocd.argoproj.io/instance` to the payments-api Deployment showed
+      up correctly on the next run, both the summary count and which application owns it.
+      `kubesentinel ticket --to github --dry-run` was run against the same live cluster and
+      correctly filtered to findings at or above the risk threshold, in the right order, with no
+      network call made. Filing a real GitHub issue was deliberately not exercised in this
+      session, kubesentinel itself has no GitHub remote yet and there was no designated repo to
+      file a test issue into.
 
 AI is not on this roadmap. If it shows up later, it will be an optional layer
 that reads KubeSentinel's evidence over something like MCP, not a dependency of

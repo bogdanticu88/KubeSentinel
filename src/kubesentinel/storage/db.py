@@ -29,6 +29,15 @@ CREATE TABLE IF NOT EXISTS snapshots (
 
 CREATE INDEX IF NOT EXISTS idx_snapshots_cluster_taken_at
     ON snapshots (cluster, taken_at);
+
+CREATE TABLE IF NOT EXISTS filed_tickets (
+    finding_id TEXT NOT NULL,
+    ticketer TEXT NOT NULL,
+    ticket_key TEXT NOT NULL,
+    url TEXT,
+    filed_at TEXT NOT NULL,
+    PRIMARY KEY (finding_id, ticketer)
+);
 """
 
 # Columns added after a database's first CREATE TABLE already ran.

@@ -22,8 +22,9 @@ one as the reference point, and `drift` or `compare` show what changed since the
 moved the score. `kubesentinel attack-paths` builds a graph from the same collected data and finds
 concrete paths from the internet to secrets, cluster-admin-equivalent access, or a node breakout.
 `kubesentinel audit` runs a numbered, saved audit compared against the previous one, with security
-debt tracking. `kubesentinel report` writes an HTML or SARIF file. The web UI and the ticketing/CI
-integrations come in later phases; see `docs/roadmap.md`.
+debt tracking. `kubesentinel report` writes an HTML or SARIF file. `kubesentinel ticket` files open
+findings into GitHub, Jira, ServiceNow, or Azure DevOps, and `kubesentinel gitops` shows which
+workloads are managed by ArgoCD or Flux. The web UI comes in a later phase; see `docs/roadmap.md`.
 
 ## Why this exists
 
@@ -126,6 +127,46 @@ platform's equivalent) into a CI job that runs `kubesentinel report --format sar
 designed for a source file and a line number, a live cluster resource is neither, results carry a
 logical location (the resource's own kind and name) instead, still valid, still listed as an
 alert, just without an inline file annotation.
+
+### Filing tickets
+
+```bash
+kubesentinel ticket --to github --repo owner/name --min-risk high
+kubesentinel ticket --to jira --min-risk critical
+```
+
+Scans, filters findings at or above `--min-risk` (default `high`), and files each one as an issue
+or work item. A finding already filed against the same tracker on an earlier run is skipped, not
+refiled, tracked locally by the finding's own deterministic id, so this is safe to run on a
+schedule. `--dry-run` shows what would be filed without filing anything, and `--limit` caps how
+many go out in one run.
+
+`--to github` shells out to the `gh` CLI and reuses whatever `gh auth login` session is already
+active, no separate credential needed. `--to jira`, `--to servicenow`, and `--to azuredevops` talk
+to each system's documented REST API directly and read their credentials from environment
+variables, none of the three were verified against a live instance, no credentials were available
+to test against one, see `docs/roadmap.md`:
+
+| Tracker | Environment variables |
+| --- | --- |
+| Jira | `KUBESENTINEL_JIRA_URL`, `KUBESENTINEL_JIRA_EMAIL`, `KUBESENTINEL_JIRA_API_TOKEN`, `KUBESENTINEL_JIRA_PROJECT` |
+| ServiceNow | `KUBESENTINEL_SERVICENOW_INSTANCE`, `KUBESENTINEL_SERVICENOW_USERNAME`, `KUBESENTINEL_SERVICENOW_PASSWORD` |
+| Azure DevOps | `KUBESENTINEL_AZDO_ORG`, `KUBESENTINEL_AZDO_PROJECT`, `KUBESENTINEL_AZDO_PAT` |
+
+If the finding's resource is managed by ArgoCD or Flux, the filed ticket says so and points at
+fixing it in the source repository rather than editing the live cluster, a direct edit would just
+drift and get reverted on the next sync anyway.
+
+### GitOps management
+
+```bash
+kubesentinel gitops --context kind-local
+```
+
+Reads the tracking labels ArgoCD and Flux already stamp onto everything they manage
+(`argocd.argoproj.io/instance`, `kustomize.toolkit.fluxcd.io/name`) off the same collected data
+`scan` uses, no new permissions needed, and shows which workloads are GitOps-managed and which
+would need a direct, hand-applied fix.
 
 ## Development
 

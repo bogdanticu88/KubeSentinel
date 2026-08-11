@@ -2,6 +2,7 @@
 
 from rich.console import Console
 
+from kubesentinel.gitops import GitOpsStatus
 from kubesentinel.models.attackpath import AttackPath
 from kubesentinel.models.audit import AuditReport
 from kubesentinel.models.drift import DriftReport
@@ -218,4 +219,44 @@ def render_audit(report: AuditReport, console: Console | None = None) -> None:
         for category in report.security_debt.by_category[:10]:
             console.print(f"  {category.category:<20} {category.count}")
         console.print(f"  Trend: {report.security_debt.trend}")
+        console.print()
+
+
+def render_gitops(statuses: list[GitOpsStatus], console: Console | None = None) -> None:
+    console = console or Console()
+
+    console.print()
+    console.print("[bold]KubeSentinel GitOps Management[/bold]")
+    console.print()
+
+    if not statuses:
+        console.print("No workloads found.")
+        console.print()
+        return
+
+    by_tool: dict[str, list[GitOpsStatus]] = {}
+    unmanaged = []
+    for status in statuses:
+        if status.source is None:
+            unmanaged.append(status)
+        else:
+            by_tool.setdefault(status.source.tool, []).append(status)
+
+    managed_count = len(statuses) - len(unmanaged)
+    console.print(f"{managed_count}/{len(statuses)} workloads are managed through GitOps.")
+    console.print()
+
+    for tool in sorted(by_tool):
+        entries = by_tool[tool]
+        console.print(f"[bold]{tool}[/bold] ({len(entries)})")
+        for status in entries:
+            assert status.source is not None
+            location = _location(status.namespace, status.name)
+            console.print(f"  {location}  <- {status.source.name}")
+        console.print()
+
+    if unmanaged:
+        console.print(f"[bold]Not GitOps-managed[/bold] ({len(unmanaged)})")
+        for status in unmanaged:
+            console.print(f"  {_location(status.namespace, status.name)}")
         console.print()

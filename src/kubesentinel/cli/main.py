@@ -4,12 +4,14 @@ import json
 import sqlite3
 from collections.abc import Iterator
 from contextlib import contextmanager
+from datetime import UTC, datetime
 from pathlib import Path
 
 import typer
 from pydantic import TypeAdapter
 from rich.console import Console
 
+from kubesentinel import gitops as gitops_module
 from kubesentinel.cli.duration import DurationParseError, parse_duration
 from kubesentinel.collector.client import current_context_name
 from kubesentinel.collector.errors import CollectorError
@@ -18,6 +20,11 @@ from kubesentinel.engines.attackpath.paths import find_attack_paths
 from kubesentinel.engines.audit.report import build_audit_report
 from kubesentinel.engines.drift.diff import compare as compare_snapshots
 from kubesentinel.engines.misconfiguration.loader import RuleLoadError
+from kubesentinel.integrations.azuredevops import AzureDevOpsTicketer
+from kubesentinel.integrations.github import GitHubTicketer
+from kubesentinel.integrations.jira import JiraTicketer
+from kubesentinel.integrations.servicenow import ServiceNowTicketer
+from kubesentinel.integrations.ticketer import Ticketer, TicketError
 from kubesentinel.models.attackpath import AttackPath
 from kubesentinel.models.scan import Snapshot
 from kubesentinel.pipeline import PipelineResult, run_scan
@@ -26,6 +33,7 @@ from kubesentinel.reporting.html import render_html
 from kubesentinel.reporting.sarif import render_sarif
 from kubesentinel.storage import db
 from kubesentinel.storage import snapshots as snapshot_store
+from kubesentinel.storage import tickets as ticket_store
 from kubesentinel.storage.db import StorageError
 
 _REPORT_DEFAULT_NAMES = {
@@ -35,6 +43,15 @@ _REPORT_DEFAULT_NAMES = {
 }
 
 _ATTACK_PATHS_ADAPTER = TypeAdapter(list[AttackPath])
+_GITOPS_ADAPTER = TypeAdapter(list[gitops_module.GitOpsStatus])
+
+_TICKETERS: dict[str, type[Ticketer]] = {
+    "github": GitHubTicketer,
+    "jira": JiraTicketer,
+    "servicenow": ServiceNowTicketer,
+    "azuredevops": AzureDevOpsTicketer,
+}
+_RISK_ORDER = ["low", "medium", "high", "critical"]
 
 app = typer.Typer(add_completion=False, no_args_is_help=True)
 baseline_app = typer.Typer(help="Manage the baseline snapshot drift is measured against.")
@@ -356,6 +373,127 @@ def compare(
         print(drift_report.model_dump_json(indent=2))
     else:
         terminal.render_drift(drift_report, console)
+
+
+@app.command()
+def gitops(
+    context: str = typer.Option(None, "--context", help="kubeconfig context to scan"),
+    namespace: str = typer.Option(None, "--namespace", help="limit the scan to a single namespace"),
+    output: str = typer.Option("terminal", "--output", "-o", help="terminal or json"),
+) -> None:
+    """Show which workloads are managed by ArgoCD or Flux, and which are not."""
+    pipeline_result = _run_pipeline(context, namespace, with_vulnerabilities=False)
+    statuses = gitops_module.detect_all(pipeline_result.resources)
+
+    if output == "json":
+        print(_GITOPS_ADAPTER.dump_json(statuses, indent=2).decode())
+    else:
+        terminal.render_gitops(statuses, console)
+
+
+def _build_ticketer(to: str, repo: str | None) -> Ticketer:
+    if to == "github":
+        return GitHubTicketer(repo=repo)
+    return _TICKETERS[to]()
+
+
+@app.command()
+def ticket(
+    context: str = typer.Option(None, "--context", help="kubeconfig context to scan"),
+    namespace: str = typer.Option(None, "--namespace", help="limit the scan to a single namespace"),
+    with_vulnerabilities: bool = typer.Option(
+        False, "--with-vulnerabilities", help="also scan workload images for known CVEs using Trivy"
+    ),
+    to: str = typer.Option(..., "--to", help="github, jira, servicenow, or azuredevops"),
+    min_risk: str = typer.Option(
+        "high",
+        "--min-risk",
+        help="file findings at or above this risk: low, medium, high, critical",
+    ),
+    repo: str = typer.Option(None, "--repo", help="GitHub repo as owner/name, github only"),
+    limit: int = typer.Option(20, "--limit", help="maximum tickets to file in one run"),
+    dry_run: bool = typer.Option(
+        False, "--dry-run", help="show what would be filed without filing anything"
+    ),
+) -> None:
+    """File open findings as tickets in an external tracker.
+
+    Skips a finding already filed against the same tracker on a previous
+    run, tracked locally by the finding's own deterministic id, so running
+    this on a schedule does not refile the same thing every time.
+    """
+    if to not in _TICKETERS:
+        console.print(
+            f"[red]Error:[/red] unknown ticketer {to!r}, "
+            "use github, jira, servicenow, or azuredevops"
+        )
+        raise typer.Exit(code=1)
+    if min_risk not in _RISK_ORDER:
+        console.print(
+            f"[red]Error:[/red] unknown risk level {min_risk!r}, use low, medium, high, or critical"
+        )
+        raise typer.Exit(code=1)
+
+    ticketer_instance = _build_ticketer(to, repo)
+    if not ticketer_instance.is_configured():
+        console.print(
+            f"[red]Error:[/red] {to} is not configured, see the README for what it needs."
+        )
+        raise typer.Exit(code=1)
+
+    pipeline_result = _run_pipeline(context, namespace, with_vulnerabilities)
+    threshold = _RISK_ORDER.index(min_risk)
+    candidates = [
+        finding
+        for finding in pipeline_result.scan_result.findings
+        if _RISK_ORDER.index(finding.risk) >= threshold
+    ]
+    candidates.sort(key=lambda finding: _RISK_ORDER.index(finding.risk), reverse=True)
+
+    filed = skipped = failed = 0
+    with _storage() as connection:
+        for finding in candidates:
+            if filed >= limit:
+                break
+            if ticket_store.already_filed(connection, finding.id, ticketer_instance.name):
+                skipped += 1
+                continue
+
+            gitops_source = gitops_module.find_source(
+                finding.resource_kind,
+                finding.resource,
+                finding.namespace,
+                pipeline_result.resources,
+            )
+
+            if dry_run:
+                console.print(f"[dim]Would file:[/dim] [{finding.risk.upper()}] {finding.title}")
+                filed += 1
+                continue
+
+            try:
+                ticket_result = ticketer_instance.file_finding(finding, gitops_source)
+            except TicketError as error:
+                console.print(f"[red]Failed to file[/red] {finding.title}: {error}")
+                failed += 1
+                continue
+
+            ticket_store.record(
+                connection,
+                finding.id,
+                ticketer_instance.name,
+                ticket_result.key,
+                ticket_result.url,
+                datetime.now(UTC),
+            )
+            console.print(f"Filed {ticket_result.url or ticket_result.key}: {finding.title}")
+            filed += 1
+
+    console.print()
+    verb = "Would file" if dry_run else "Filed"
+    console.print(f"{verb} {filed}, skipped {skipped} already filed, {failed} failed.")
+    if failed:
+        raise typer.Exit(code=1)
 
 
 if __name__ == "__main__":
