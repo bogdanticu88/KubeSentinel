@@ -1,7 +1,8 @@
-"""Terminal rendering of a scan result and a drift report."""
+"""Terminal rendering of a scan result, a drift report, and attack paths."""
 
 from rich.console import Console
 
+from kubesentinel.models.attackpath import AttackPath
 from kubesentinel.models.drift import DriftReport
 from kubesentinel.models.scan import ScanResult
 
@@ -138,3 +139,40 @@ def _location(namespace: str | None, name: str) -> str:
 def _short(value: object, limit: int = 60) -> str:
     text = "(not set)" if value is None else str(value)
     return text if len(text) <= limit else text[: limit - 3] + "..."
+
+
+def render_attack_paths(paths: list[AttackPath], console: Console | None = None) -> None:
+    console = console or Console()
+
+    console.print()
+    console.print("[bold]KubeSentinel Attack Paths[/bold]")
+    console.print()
+
+    if not paths:
+        console.print("No attack path found from the internet to a sensitive target.")
+        console.print()
+        return
+
+    plural = "s" if len(paths) != 1 else ""
+    console.print(f"Found {len(paths)} path{plural}.")
+    console.print()
+
+    shown = paths[:10]
+    for path in shown:
+        console.print(f"[bold]ATTACK PATH {path.id}[/bold]")
+        console.print()
+        console.print(f"Entry point: {path.entry_point}")
+        console.print(f"Target:      {path.target}")
+        console.print()
+        console.print("Path:")
+        for node in path.nodes:
+            console.print(f"  {node.kind}: {node.identifier}")
+        console.print()
+        console.print(f"Risk:       {path.risk.upper()}")
+        console.print(f"Confidence: {path.confidence.upper()}")
+        console.print()
+
+    if len(paths) > len(shown):
+        remaining = len(paths) - len(shown)
+        console.print(f"... and {remaining} more, use --output json for the full list")
+        console.print()

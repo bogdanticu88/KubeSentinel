@@ -72,13 +72,42 @@ will eventually end up.
 - [ ] HTML and SARIF report output
 - [ ] `kubesentinel audit` and `kubesentinel report`
 
-## Phase 5: Attack graph
+## Phase 5: Attack graph (done)
 
-- [ ] In-house relationship graph over identity, workloads, network reachability,
-      and exposure, informed by RBAC escalation primitives (`bind`, `escalate`,
-      `impersonate`, hostPath/privileged pod creation) as first-class edges
-- [ ] Path classification: theoretical, possible, reachable, high-confidence
-- [ ] `kubesentinel attack-paths`
+- [x] In-house relationship graph (NetworkX), built from data already collected,
+      no new API permissions needed. Internet as the synthetic entry point,
+      real Service/Ingress/Workload/ServiceAccount/Role nodes, and two
+      synthetic sinks: a per-namespace secrets-access capability (actual
+      Secret objects and values are never collected, so this is the
+      capability to read them, not one specific secret) and a
+      cluster-admin-equivalent node for RBAC escalation and wildcard grants.
+- [x] Path classification: theoretical (mechanism unconfirmed, a hostPath
+      mount might not point at anything exploitable), possible (needs the
+      attacker to actively use a granted capability, escalate/bind/
+      impersonate), reachable (every edge is a verified structural
+      relationship), high_confidence (the entry workload already has an open
+      critical or high finding, a known way in rather than a hypothetical
+      one). Escalation is computed from the same findings the misconfiguration
+      and vulnerability engines already produced, not recomputed separately.
+- [x] `kubesentinel attack-paths`, terminal and JSON output.
+- [x] Correctly models a real RBAC nuance: a RoleBinding referencing a
+      ClusterRole only grants access within the RoleBinding's own namespace,
+      only a ClusterRoleBinding actually reaches every namespace. Verified
+      with a dedicated test before trusting it.
+- [x] Shared the exposure-selector and RBAC-binding joins with the risk
+      correlation engine (`relationships.py`) instead of duplicating them,
+      correlation stops at one hop, the graph keeps going, no reason to
+      compute the same facts twice.
+- [x] Scoped out for now: true node-level lateral movement (which workload
+      can reach another via shared node placement) needs per-pod node
+      scheduling data, which the Phase 2 dedup fix deliberately stopped
+      collecting. hostPath-based node breakout is still modeled as a path to
+      a generic Node sink, cross-workload movement via a shared node is not.
+- [x] Verified against the same kind cluster: found the payments-api example's
+      two paths (Internet to cluster-admin, Internet to namespace secrets)
+      exactly matching the shape of the original design brief's own worked
+      example, both scored high_confidence because the workload has real
+      open critical findings right now, not hypothetically.
 
 ## Phase 6: Web UI
 

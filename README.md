@@ -19,8 +19,9 @@ vulnerabilities with Trivy, and prints an explainable, risk-weighted score. Risk
 a finding's raw severity based on whether its workload is exposed and what its ServiceAccount can
 do, not just reported at face value. `kubesentinel snapshot` saves a scan locally, `baseline` sets
 one as the reference point, and `drift` or `compare` show what changed since then and how much it
-moved the score. The attack path graph and scheduled auditing come in later phases; see
-`docs/roadmap.md`.
+moved the score. `kubesentinel attack-paths` builds a graph from the same collected data and finds
+concrete paths from the internet to secrets, cluster-admin-equivalent access, or a node breakout.
+Scheduled auditing and the web UI come in later phases; see `docs/roadmap.md`.
 
 ## Why this exists
 
@@ -85,6 +86,18 @@ kubesentinel compare 9 12
 Snapshots live in a local SQLite database, one file, no server, under
 `~/.kubesentinel/kubesentinel.db` by default. Set `KUBESENTINEL_HOME` to point storage somewhere
 else, mainly useful for tests or a CI job that wants its own throwaway state directory.
+
+### Attack paths
+
+```bash
+kubesentinel attack-paths --context kind-local
+```
+
+Builds a graph from the same data `scan` already collects, no new permissions needed, and finds
+every path from the internet to a namespace's secrets, cluster-admin-equivalent access, or a node
+breakout through a hostPath mount. Each path is scored `theoretical`, `possible`, `reachable`, or
+`high_confidence` depending on how direct the chain is and whether the entry workload already has
+a real open finding, a known way in is treated as more concrete than a hypothetical one.
 
 ## Development
 

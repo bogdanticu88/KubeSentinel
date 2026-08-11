@@ -5,19 +5,25 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 
 import typer
+from pydantic import TypeAdapter
 from rich.console import Console
 
 from kubesentinel.cli.duration import DurationParseError, parse_duration
 from kubesentinel.collector.client import current_context_name
 from kubesentinel.collector.errors import CollectorError
+from kubesentinel.engines.attackpath.graph import build_graph
+from kubesentinel.engines.attackpath.paths import find_attack_paths
 from kubesentinel.engines.drift.diff import compare as compare_snapshots
 from kubesentinel.engines.misconfiguration.loader import RuleLoadError
+from kubesentinel.models.attackpath import AttackPath
 from kubesentinel.models.scan import Snapshot
 from kubesentinel.pipeline import PipelineResult, run_scan
 from kubesentinel.reporting import terminal
 from kubesentinel.storage import db
 from kubesentinel.storage import snapshots as snapshot_store
 from kubesentinel.storage.db import StorageError
+
+_ATTACK_PATHS_ADAPTER = TypeAdapter(list[AttackPath])
 
 app = typer.Typer(add_completion=False, no_args_is_help=True)
 baseline_app = typer.Typer(help="Manage the baseline snapshot drift is measured against.")
@@ -210,6 +216,26 @@ def drift(
         print(report.model_dump_json(indent=2))
     else:
         terminal.render_drift(report, console)
+
+
+@app.command("attack-paths")
+def attack_paths(
+    context: str = typer.Option(None, "--context", help="kubeconfig context to scan"),
+    namespace: str = typer.Option(None, "--namespace", help="limit the scan to a single namespace"),
+    with_vulnerabilities: bool = typer.Option(
+        False, "--with-vulnerabilities", help="also scan workload images for known CVEs using Trivy"
+    ),
+    output: str = typer.Option("terminal", "--output", "-o", help="terminal or json"),
+) -> None:
+    """Find paths from the internet to secrets, cluster-admin, or a node."""
+    pipeline_result = _run_pipeline(context, namespace, with_vulnerabilities)
+    graph = build_graph(pipeline_result.resources)
+    paths = find_attack_paths(graph, pipeline_result.scan_result.findings)
+
+    if output == "json":
+        print(_ATTACK_PATHS_ADAPTER.dump_json(paths, indent=2).decode())
+    else:
+        terminal.render_attack_paths(paths, console)
 
 
 @app.command()
