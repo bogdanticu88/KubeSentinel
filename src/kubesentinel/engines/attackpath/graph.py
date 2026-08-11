@@ -162,16 +162,35 @@ def _add_role_edges(graph: nx.DiGraph, resources: list[CollectedResource]) -> No
             if rule_list is None:
                 continue
 
-            role_node_id = role_node(role_identity_namespace, role_kind, role_name)
-            role_label = f"{role_identity_namespace or 'cluster'}/{role_name}"
+            # A RoleBinding, even one referencing a ClusterRole, only grants
+            # access within its own namespace, only a ClusterRoleBinding
+            # actually reaches every namespace. The same ClusterRole can be
+            # bound more than once with a different scope each time, once
+            # cluster-wide, once just within a namespace, so the graph node
+            # for this grant is keyed by the scope actually earned through
+            # this binding, not by the role's bare identity. Keying by
+            # identity alone used to collapse every binding of a ClusterRole
+            # onto one shared node, which meant a ServiceAccount bound
+            # through the narrower grant inherited capability edges that
+            # only ever came from someone else's wider one landing on the
+            # same node. For a Role this is a no-op, a RoleBinding can only
+            # ever reference a Role in its own namespace, so the grant scope
+            # and the role's identity namespace are always the same value.
+            grant_namespace = binding.namespace if binding.kind == "RoleBinding" else None
+            role_node_id = role_node(grant_namespace, role_kind, role_name)
+            role_label = _role_label(role_kind, role_name, grant_namespace)
             graph.add_node(role_node_id, kind=role_kind, identifier=role_label)
             graph.add_edge(sa_node_id, role_node_id, relation="bound_to", confidence="reachable")
 
-            # A RoleBinding, even one referencing a ClusterRole, only grants
-            # access within its own namespace, only a ClusterRoleBinding
-            # actually reaches every namespace.
-            grant_namespace = binding.namespace if binding.kind == "RoleBinding" else None
             _add_capability_edges(graph, role_node_id, rule_list, grant_namespace)
+
+
+def _role_label(role_kind: str, role_name: str, grant_namespace: str | None) -> str:
+    if grant_namespace is None:
+        return f"cluster/{role_name}"
+    if role_kind == "ClusterRole":
+        return f"cluster/{role_name} (bound within {grant_namespace})"
+    return f"{grant_namespace}/{role_name}"
 
 
 def _add_capability_edges(

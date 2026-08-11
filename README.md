@@ -164,9 +164,10 @@ kubesentinel gitops --context kind-local
 ```
 
 Reads the tracking labels ArgoCD and Flux already stamp onto everything they manage
-(`argocd.argoproj.io/instance`, `kustomize.toolkit.fluxcd.io/name`) off the same collected data
-`scan` uses, no new permissions needed, and shows which workloads are GitOps-managed and which
-would need a direct, hand-applied fix.
+(`argocd.argoproj.io/instance`, `kustomize.toolkit.fluxcd.io/name`, and `helm.toolkit.fluxcd.io/name`
+as a fallback for a bare Flux HelmRelease with pruning or drift detection turned on) off the same
+collected data `scan` uses, no new permissions needed, and shows which workloads are GitOps-managed
+and which would need a direct, hand-applied fix.
 
 ## Development
 

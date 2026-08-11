@@ -169,8 +169,9 @@ def test_rolebinding_scopes_a_clusterrole_grant_to_its_own_namespace():
 
     graph = build_graph([pod, service, cluster_role, binding])
 
-    role_id = role_node(None, "ClusterRole", "secret-reader")
-    # bound via a RoleBinding, so the grant is scoped to team-a, not every namespace
+    # bound via a RoleBinding, so the grant node itself is scoped to team-a,
+    # not the ClusterRole's own cluster-wide identity
+    role_id = role_node("team-a", "ClusterRole", "secret-reader")
     assert graph.has_edge(role_id, secrets_node("team-a"))
     assert not graph.has_edge(role_id, secrets_node(None))
 
@@ -192,6 +193,55 @@ def test_clusterrolebinding_grants_secrets_access_cluster_wide():
 
     role_id = role_node(None, "ClusterRole", "secret-reader")
     assert graph.has_edge(role_id, secrets_node(None))
+
+
+def test_a_narrowly_bound_clusterrole_grant_does_not_inherit_a_wider_grant_bound_elsewhere():
+    # Regression test: the same ClusterRole bound twice, once scoped to
+    # team-a through a RoleBinding, once cluster-wide through an unrelated
+    # ClusterRoleBinding for a different ServiceAccount. Before this was
+    # fixed, both bindings' capability edges landed on one shared role
+    # node keyed only by the ClusterRole's own identity, so team-a's
+    # ServiceAccount ended up with a path to secrets in every namespace,
+    # a grant it was never actually given.
+    narrow_pod = builders.pod(
+        name="app", namespace="team-a", labels={"app": "web"}, service_account_name="app-sa"
+    )
+    narrow_service = builders.service(
+        namespace="team-a", service_type="LoadBalancer", selector={"app": "web"}
+    )
+    cluster_role = builders.role(
+        name="secret-reader", kind="ClusterRole", rules=[{"resources": ["secrets"], "verbs": ["get"]}]
+    )
+    narrow_binding = builders.role_binding(
+        namespace="team-a",
+        subjects=[{"kind": "ServiceAccount", "name": "app-sa", "namespace": "team-a"}],
+        role_ref_kind="ClusterRole",
+        role_ref_name="secret-reader",
+    )
+    wide_binding = builders.role_binding(
+        name="wide-binding",
+        kind="ClusterRoleBinding",
+        subjects=[{"kind": "ServiceAccount", "name": "other-sa", "namespace": "default"}],
+        role_ref_kind="ClusterRole",
+        role_ref_name="secret-reader",
+    )
+    other_pod = builders.pod(
+        name="other", namespace="default", labels={"app": "other"}, service_account_name="other-sa"
+    )
+    other_service = builders.service(
+        namespace="default", service_type="LoadBalancer", selector={"app": "other"}
+    )
+
+    graph = build_graph(
+        [narrow_pod, narrow_service, other_pod, other_service, cluster_role, narrow_binding, wide_binding]
+    )
+
+    narrow_sa = service_account_node("team-a", "app-sa")
+    wide_sa = service_account_node("default", "other-sa")
+
+    assert nx.has_path(graph, narrow_sa, secrets_node("team-a"))
+    assert not nx.has_path(graph, narrow_sa, secrets_node(None))
+    assert nx.has_path(graph, wide_sa, secrets_node(None))
 
 
 def test_hostpath_plus_privileged_reaches_node_breakout():

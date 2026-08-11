@@ -73,6 +73,13 @@ def _storage() -> Iterator[sqlite3.Connection]:
         raise typer.Exit(code=1) from error
     try:
         yield connection
+    except StorageError as error:
+        # A safety net for the read calls that don't already have their own
+        # try/except with a more specific message, that inner one always
+        # fires first, this only catches what would otherwise be an
+        # uncaught traceback (a locked database, a corrupted row).
+        console.print(f"[red]Error:[/red] {error}")
+        raise typer.Exit(code=1) from error
     finally:
         connection.close()
 
@@ -451,11 +458,18 @@ def ticket(
     candidates.sort(key=lambda finding: _RISK_ORDER.index(finding.risk), reverse=True)
 
     filed = skipped = failed = 0
+    storage_error: StorageError | None = None
     with _storage() as connection:
         for finding in candidates:
             if filed >= limit:
                 break
-            if ticket_store.already_filed(connection, finding.id, ticketer_instance.name):
+
+            try:
+                already = ticket_store.already_filed(connection, finding.id, ticketer_instance.name)
+            except StorageError as error:
+                storage_error = error
+                break
+            if already:
                 skipped += 1
                 continue
 
@@ -478,21 +492,36 @@ def ticket(
                 failed += 1
                 continue
 
-            ticket_store.record(
-                connection,
-                finding.id,
-                ticketer_instance.name,
-                ticket_result.key,
-                ticket_result.url,
-                datetime.now(UTC),
-            )
-            console.print(f"Filed {ticket_result.url or ticket_result.key}: {finding.title}")
             filed += 1
+            try:
+                ticket_store.record(
+                    connection,
+                    finding.id,
+                    ticketer_instance.name,
+                    ticket_result.key,
+                    ticket_result.url,
+                    datetime.now(UTC),
+                )
+            except StorageError as error:
+                # The ticket was already created on the tracker's side, that
+                # cannot be undone here, so this stays a warning rather than
+                # a failure, but a later run will not know about it and may
+                # file a duplicate, the URL is printed so it is not lost.
+                console.print(
+                    f"[yellow]Filed {ticket_result.url or ticket_result.key} but could not "
+                    f"record it locally, a later run may refile it: {error}[/yellow]"
+                )
+                storage_error = error
+                break
+
+            console.print(f"Filed {ticket_result.url or ticket_result.key}: {finding.title}")
 
     console.print()
     verb = "Would file" if dry_run else "Filed"
     console.print(f"{verb} {filed}, skipped {skipped} already filed, {failed} failed.")
-    if failed:
+    if storage_error is not None:
+        console.print(f"[red]Stopped early due to a storage error:[/red] {storage_error}")
+    if failed or storage_error is not None:
         raise typer.Exit(code=1)
 
 

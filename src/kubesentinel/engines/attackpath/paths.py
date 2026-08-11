@@ -18,10 +18,11 @@ from kubesentinel.models.attackpath import AttackPath, Confidence, PathNode
 from kubesentinel.models.finding import Finding
 from kubesentinel.models.rule import Severity
 
-# A real attack path in this graph is at most seven hops (Internet, Ingress,
-# Service, Workload, ServiceAccount, Role, target), the graph is a strict
-# DAG by construction so this cutoff is a sanity bound, not something that
-# would otherwise be needed to keep the search tractable.
+# nx.all_simple_paths counts cutoff in edges, not nodes. The deepest real
+# chain is six edges (Internet, Ingress, Service, Workload, ServiceAccount,
+# Role, target is seven nodes), seven edges leaves one hop of headroom. The
+# graph is a strict DAG by construction, so this is a sanity bound, not
+# something that would otherwise be needed to keep the search tractable.
 _MAX_PATH_LENGTH = 7
 
 _CONFIDENCE_RANK: dict[Confidence, int] = {

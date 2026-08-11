@@ -54,57 +54,77 @@ def save(connection: sqlite3.Connection, snapshot: Snapshot) -> int:
 
 
 def get(connection: sqlite3.Connection, snapshot_id: int) -> Snapshot | None:
-    row = connection.execute("SELECT * FROM snapshots WHERE id = ?", (snapshot_id,)).fetchone()
-    return _row_to_snapshot(row) if row else None
+    try:
+        row = connection.execute("SELECT * FROM snapshots WHERE id = ?", (snapshot_id,)).fetchone()
+        return _row_to_snapshot(row) if row else None
+    except (sqlite3.Error, ValueError) as error:
+        raise StorageError(f"could not read snapshot {snapshot_id}: {error}") from error
 
 
 def get_baseline(connection: sqlite3.Connection, cluster: str) -> Snapshot | None:
-    row = connection.execute(
-        """
-        SELECT * FROM snapshots
-        WHERE cluster = ? AND is_baseline = 1
-        ORDER BY taken_at DESC LIMIT 1
-        """,
-        (cluster,),
-    ).fetchone()
-    return _row_to_snapshot(row) if row else None
+    try:
+        row = connection.execute(
+            """
+            SELECT * FROM snapshots
+            WHERE cluster = ? AND is_baseline = 1
+            ORDER BY taken_at DESC LIMIT 1
+            """,
+            (cluster,),
+        ).fetchone()
+        return _row_to_snapshot(row) if row else None
+    except (sqlite3.Error, ValueError) as error:
+        raise StorageError(f"could not read the baseline for {cluster}: {error}") from error
 
 
 def get_latest(connection: sqlite3.Connection, cluster: str) -> Snapshot | None:
-    row = connection.execute(
-        "SELECT * FROM snapshots WHERE cluster = ? ORDER BY taken_at DESC LIMIT 1",
-        (cluster,),
-    ).fetchone()
-    return _row_to_snapshot(row) if row else None
+    try:
+        row = connection.execute(
+            "SELECT * FROM snapshots WHERE cluster = ? ORDER BY taken_at DESC LIMIT 1",
+            (cluster,),
+        ).fetchone()
+        return _row_to_snapshot(row) if row else None
+    except (sqlite3.Error, ValueError) as error:
+        raise StorageError(f"could not read the latest snapshot for {cluster}: {error}") from error
 
 
 def get_nearest_before(
     connection: sqlite3.Connection, cluster: str, before: datetime
 ) -> Snapshot | None:
-    row = connection.execute(
-        """
-        SELECT * FROM snapshots
-        WHERE cluster = ? AND taken_at <= ?
-        ORDER BY taken_at DESC LIMIT 1
-        """,
-        (cluster, before.isoformat()),
-    ).fetchone()
-    return _row_to_snapshot(row) if row else None
+    try:
+        row = connection.execute(
+            """
+            SELECT * FROM snapshots
+            WHERE cluster = ? AND taken_at <= ?
+            ORDER BY taken_at DESC LIMIT 1
+            """,
+            (cluster, before.isoformat()),
+        ).fetchone()
+        return _row_to_snapshot(row) if row else None
+    except (sqlite3.Error, ValueError) as error:
+        raise StorageError(
+            f"could not read a snapshot for {cluster} before {before}: {error}"
+        ) from error
 
 
 def list_snapshots(connection: sqlite3.Connection, cluster: str) -> list[Snapshot]:
-    rows = connection.execute(
-        "SELECT * FROM snapshots WHERE cluster = ? ORDER BY taken_at DESC", (cluster,)
-    ).fetchall()
-    return [_row_to_snapshot(row) for row in rows]
+    try:
+        rows = connection.execute(
+            "SELECT * FROM snapshots WHERE cluster = ? ORDER BY taken_at DESC", (cluster,)
+        ).fetchall()
+        return [_row_to_snapshot(row) for row in rows]
+    except (sqlite3.Error, ValueError) as error:
+        raise StorageError(f"could not list snapshots for {cluster}: {error}") from error
 
 
 def list_audits(connection: sqlite3.Connection, cluster: str) -> list[Snapshot]:
-    rows = connection.execute(
-        "SELECT * FROM snapshots WHERE cluster = ? AND is_audit = 1 ORDER BY taken_at DESC",
-        (cluster,),
-    ).fetchall()
-    return [_row_to_snapshot(row) for row in rows]
+    try:
+        rows = connection.execute(
+            "SELECT * FROM snapshots WHERE cluster = ? AND is_audit = 1 ORDER BY taken_at DESC",
+            (cluster,),
+        ).fetchall()
+        return [_row_to_snapshot(row) for row in rows]
+    except (sqlite3.Error, ValueError) as error:
+        raise StorageError(f"could not list audits for {cluster}: {error}") from error
 
 
 def set_baseline(connection: sqlite3.Connection, snapshot_id: int) -> None:

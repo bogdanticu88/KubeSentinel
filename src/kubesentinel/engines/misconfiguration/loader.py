@@ -21,6 +21,10 @@ def load_rules(rules_root: Path = RULES_ROOT) -> list[Rule]:
     for rule_file in sorted(rules_root.rglob("*.yaml")):
         try:
             raw = yaml.safe_load(rule_file.read_text(encoding="utf-8"))
+        except OSError as read_error:
+            raise RuleLoadError(
+                f"{rule_file}: could not read the file: {read_error}"
+            ) from read_error
         except yaml.YAMLError as parse_error:
             raise RuleLoadError(f"{rule_file}: invalid YAML: {parse_error}") from parse_error
 

@@ -14,10 +14,15 @@ from kubesentinel.storage.db import StorageError
 
 
 def already_filed(connection: sqlite3.Connection, finding_id: str, ticketer: str) -> bool:
-    row = connection.execute(
-        "SELECT 1 FROM filed_tickets WHERE finding_id = ? AND ticketer = ?",
-        (finding_id, ticketer),
-    ).fetchone()
+    try:
+        row = connection.execute(
+            "SELECT 1 FROM filed_tickets WHERE finding_id = ? AND ticketer = ?",
+            (finding_id, ticketer),
+        ).fetchone()
+    except sqlite3.Error as error:
+        raise StorageError(
+            f"could not check whether {finding_id} was already filed to {ticketer}: {error}"
+        ) from error
     return row is not None
 
 

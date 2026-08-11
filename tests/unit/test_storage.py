@@ -98,6 +98,29 @@ def test_get_baseline_returns_none_when_nothing_is_set(tmp_path):
     assert snapshots.get_baseline(connection, "test-cluster") is None
 
 
+def test_a_read_against_a_broken_database_raises_storage_error_not_a_raw_traceback(tmp_path):
+    # Every read function shares this failure mode, get() stands in for all
+    # of them, they all wrap connection.execute the same way.
+    connection = db.connect(tmp_path / "test.db")
+    snapshots.save(connection, _snapshot())
+    connection.execute("DROP TABLE snapshots")
+
+    with pytest.raises(StorageError, match="could not read"):
+        snapshots.get(connection, 1)
+
+
+def test_a_corrupted_row_raises_storage_error_instead_of_a_bare_value_error(tmp_path):
+    connection = db.connect(tmp_path / "test.db")
+    snapshot_id = snapshots.save(connection, _snapshot())
+    connection.execute(
+        "UPDATE snapshots SET taken_at = 'not-a-real-timestamp' WHERE id = ?", (snapshot_id,)
+    )
+    connection.commit()
+
+    with pytest.raises(StorageError, match="could not read"):
+        snapshots.get(connection, snapshot_id)
+
+
 def test_get_nearest_before_finds_the_closest_snapshot_not_after_the_cutoff(tmp_path):
     connection = db.connect(tmp_path / "test.db")
     early = _snapshot().model_copy(update={"taken_at": datetime(2026, 1, 1, tzinfo=UTC)})

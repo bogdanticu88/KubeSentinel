@@ -80,6 +80,17 @@ def test_invalid_yaml_raises(tmp_path: Path):
         load_rules(tmp_path)
 
 
+def test_an_unreadable_file_raises_a_rule_load_error_not_a_bare_os_error(tmp_path: Path, monkeypatch):
+    (tmp_path / "unreadable.yaml").write_text("id: KS-TEST-004", encoding="utf-8")
+
+    def raise_os_error(self, encoding=None):
+        raise OSError("permission denied")
+
+    monkeypatch.setattr(Path, "read_text", raise_os_error)
+    with pytest.raises(RuleLoadError, match="could not read"):
+        load_rules(tmp_path)
+
+
 def test_schema_violation_raises(tmp_path: Path):
     _write_rule(tmp_path, "bad.yaml", {"id": "KS-TEST-003", "name": "missing required fields"})
     with pytest.raises(RuleLoadError):
