@@ -1,4 +1,8 @@
 <p align="center">
+  <img src="assets/banner.png" alt="KubeSentinel - Kubernetes Security & Posture Guardian" width="100%">
+</p>
+
+<p align="center">
   <a href="https://github.com/bogdanticu88/KubeSentinel/actions/workflows/ci.yml"><img src="https://github.com/bogdanticu88/KubeSentinel/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="LICENSE"><img src="https://img.shields.io/github/license/bogdanticu88/KubeSentinel" alt="License"></a>
   <a href="pyproject.toml"><img src="https://img.shields.io/badge/python-3.12%2B-blue" alt="Python Version"></a>
