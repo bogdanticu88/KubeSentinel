@@ -1,3 +1,11 @@
+<p align="center">
+  <a href="https://github.com/bogdanticu88/KubeSentinel/actions/workflows/ci.yml"><img src="https://github.com/bogdanticu88/KubeSentinel/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/bogdanticu88/KubeSentinel" alt="License"></a>
+  <a href="pyproject.toml"><img src="https://img.shields.io/badge/python-3.12%2B-blue" alt="Python Version"></a>
+  <a href="#why-this-exists"><img src="https://img.shields.io/badge/core%20engine-deterministic-informational" alt="Deterministic Core"></a>
+  <a href="#development"><img src="https://img.shields.io/badge/PRs-welcome-brightgreen" alt="PRs Welcome"></a>
+</p>
+
 # KubeSentinel
 
 Continuous Kubernetes security assurance.
