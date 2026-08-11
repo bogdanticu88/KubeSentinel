@@ -21,7 +21,9 @@ do, not just reported at face value. `kubesentinel snapshot` saves a scan locall
 one as the reference point, and `drift` or `compare` show what changed since then and how much it
 moved the score. `kubesentinel attack-paths` builds a graph from the same collected data and finds
 concrete paths from the internet to secrets, cluster-admin-equivalent access, or a node breakout.
-Scheduled auditing and the web UI come in later phases; see `docs/roadmap.md`.
+`kubesentinel audit` runs a numbered, saved audit compared against the previous one, with security
+debt tracking. `kubesentinel report` writes an HTML or SARIF file. The web UI and the ticketing/CI
+integrations come in later phases; see `docs/roadmap.md`.
 
 ## Why this exists
 
@@ -98,6 +100,32 @@ every path from the internet to a namespace's secrets, cluster-admin-equivalent 
 breakout through a hostPath mount. Each path is scored `theoretical`, `possible`, `reachable`, or
 `high_confidence` depending on how direct the chain is and whether the entry workload already has
 a real open finding, a known way in is treated as more concrete than a hypothetical one.
+
+### Scheduled audits and security debt
+
+```bash
+kubesentinel audit --context kind-local
+```
+
+Scans, saves the result as a numbered audit snapshot, and compares it against the cluster's
+previous audit (or the baseline, for the first one): findings by severity, what's new or resolved,
+drift events, how the attack path count moved, and a security debt breakdown, how long each open
+finding has been sitting there and in how many past scans it has shown up, read straight off a
+finding's own id rather than tracked separately.
+
+### Reports
+
+```bash
+kubesentinel report --format html --output report.html
+kubesentinel report --format sarif --output results.sarif
+```
+
+SARIF output works with GitHub's Security tab and Azure DevOps code-scanning natively, no custom
+upload code needed on KubeSentinel's side, just wire `github/codeql-action/upload-sarif` (or your
+platform's equivalent) into a CI job that runs `kubesentinel report --format sarif`. SARIF was
+designed for a source file and a line number, a live cluster resource is neither, results carry a
+logical location (the resource's own kind and name) instead, still valid, still listed as an
+alert, just without an inline file annotation.
 
 ## Development
 

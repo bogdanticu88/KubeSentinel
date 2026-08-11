@@ -60,6 +60,7 @@ class Snapshot(BaseModel):
     cluster: str
     taken_at: datetime
     is_baseline: bool = False
+    is_audit: bool = False
     kubernetes_version: str | None = None
     node_count: int = 0
     resources: list[CollectedResource] = Field(default_factory=list)

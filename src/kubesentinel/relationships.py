@@ -12,6 +12,7 @@ from kubesentinel.models.resource import CollectedResource
 
 SECRET_READ_VERBS = {"get", "list", "watch", "*"}
 ESCALATION_VERBS = {"escalate", "bind", "impersonate"}
+WRITE_VERBS = {"create", "update", "patch", "delete", "deletecollection", "*"}
 
 # (namespace, kind, name) identifies a Role or ClusterRole, namespace is
 # None for a ClusterRole since it has none.
@@ -126,6 +127,24 @@ def bound_roles(
 
 def has_wildcard(rule: dict) -> bool:
     return "*" in (rule.get("resources") or []) or "*" in (rule.get("verbs") or [])
+
+
+def grants_full_access(rule: dict) -> bool:
+    """True cluster-admin equivalent: can act on any resource type with a
+    verb that actually changes state, not just read it. A role that can
+    only get/list everything is a severe data-exposure risk on its own
+    (grants_secret_read already covers the secrets case specifically) but
+    it cannot modify or destroy anything, a meaningfully smaller risk than
+    real cluster-admin power, worth telling apart rather than flagging the
+    same way. Confirmed against a live cluster: narrowing a wildcard-
+    resources role down to read-only verbs should stop looking like a path
+    to full cluster compromise, and before this it did not.
+    """
+    resources = rule.get("resources") or []
+    verbs = set(rule.get("verbs") or [])
+    if "*" in verbs:
+        return True
+    return "*" in resources and bool(verbs & WRITE_VERBS)
 
 
 def grants_secret_read(rule: dict) -> bool:

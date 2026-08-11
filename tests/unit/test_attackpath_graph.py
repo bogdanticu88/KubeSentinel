@@ -97,6 +97,46 @@ def test_wildcard_role_reaches_cluster_admin_with_reachable_confidence():
     assert edge["confidence"] == "reachable"
 
 
+def test_read_only_wildcard_resources_does_not_reach_cluster_admin():
+    # Confirmed against a real cluster: narrowing a wildcard-resources role
+    # down to get/list should stop looking like a path to full cluster
+    # compromise. Reading everything is still a real problem, the secrets
+    # edge already covers that, but it cannot create, modify, or delete
+    # anything, which is a meaningfully smaller risk than cluster-admin.
+    pod = builders.pod(name="app", labels={"app": "web"}, service_account_name="app-sa")
+    service = builders.service(service_type="LoadBalancer", selector={"app": "web"})
+    role = builders.role(name="read-only", rules=[{"resources": ["*"], "verbs": ["get", "list"]}])
+    binding = builders.role_binding(
+        subjects=[{"kind": "ServiceAccount", "name": "app-sa", "namespace": "default"}],
+        role_ref_kind="Role",
+        role_ref_name="read-only",
+    )
+
+    graph = build_graph([pod, service, role, binding])
+
+    role_id = role_node("default", "Role", "read-only")
+    assert not graph.has_edge(role_id, CLUSTER_ADMIN)
+    # still flagged for reading every secret in the namespace, that part is correct
+    assert graph.has_edge(role_id, secrets_node("default"))
+
+
+def test_wildcard_resources_with_a_write_verb_reaches_cluster_admin():
+    pod = builders.pod(name="app", labels={"app": "web"}, service_account_name="app-sa")
+    service = builders.service(service_type="LoadBalancer", selector={"app": "web"})
+    role = builders.role(name="writer", rules=[{"resources": ["*"], "verbs": ["get", "delete"]}])
+    binding = builders.role_binding(
+        subjects=[{"kind": "ServiceAccount", "name": "app-sa", "namespace": "default"}],
+        role_ref_kind="Role",
+        role_ref_name="writer",
+    )
+
+    graph = build_graph([pod, service, role, binding])
+
+    role_id = role_node("default", "Role", "writer")
+    edge = graph.edges[role_id, CLUSTER_ADMIN]
+    assert edge["confidence"] == "reachable"
+
+
 def test_escalation_verb_without_wildcard_reaches_cluster_admin_with_possible_confidence():
     pod = builders.pod(name="app", labels={"app": "web"}, service_account_name="app-sa")
     service = builders.service(service_type="LoadBalancer", selector={"app": "web"})

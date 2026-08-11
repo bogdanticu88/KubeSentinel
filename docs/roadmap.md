@@ -65,12 +65,34 @@ will eventually end up.
       score moved the right direction, and compare against stored snapshot
       ids reproduced the identical report with no cluster connection at all.
 
-## Phase 4: Auditing
+## Phase 4: Auditing (done)
 
-- [ ] Scheduled audits compared against the previous run
-- [ ] Security debt tracking (age, recurrence, ownership)
-- [ ] HTML and SARIF report output
-- [ ] `kubesentinel audit` and `kubesentinel report`
+- [x] `kubesentinel audit`: a numbered, stored audit snapshot compared
+      against the previous audit for that cluster, or the baseline if this
+      is the first one. Findings by severity, new/resolved/drift counts,
+      attack path count delta, security debt.
+- [x] Security debt tracking: age and recurrence read straight off how many
+      stored snapshots a finding's (deterministic) id has appeared in, no
+      separate tracking table needed. Owner attribution from the original
+      design was skipped, nothing in the data model reliably identifies who
+      owns a resource yet.
+- [x] SARIF 2.1.0 and self-contained HTML report output, `kubesentinel
+      report --format html|sarif|json`. SARIF was built for source files
+      with a line number, a live cluster resource is not one, results use a
+      SARIF logicalLocation instead of a physicalLocation, still valid,
+      still ingested by GitHub's Security tab and generic SARIF viewers,
+      just without an inline file annotation.
+- [x] Live-verified a real fix this surfaced: a Role with `resources: ["*"]`
+      and only read verbs (`get`, `list`) was being modeled as cluster-admin
+      equivalent, the same as a Role with wildcard verbs. Reading everything
+      is a severe exposure on its own (still correctly flagged via the
+      secrets edge) but it cannot create, modify, or delete anything, a
+      meaningfully smaller risk than true cluster-admin power. Caught by
+      narrowing a live Role's verbs and watching the attack-paths count not
+      change when it should have, fixed, then reconfirmed the count dropped
+      correctly on the next audit, including retroactively against
+      already-stored historical snapshots, since attack paths are always
+      recomputed from stored resources, never cached.
 
 ## Phase 5: Attack graph (done)
 

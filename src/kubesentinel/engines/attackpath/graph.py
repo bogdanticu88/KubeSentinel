@@ -20,8 +20,8 @@ from kubesentinel.models.resource import CollectedResource
 from kubesentinel.relationships import (
     binding_targets_service_account,
     grants_escalation,
+    grants_full_access,
     grants_secret_read,
-    has_wildcard,
     ingress_backend_service_names,
     pod_template_labels,
     role_rules,
@@ -186,7 +186,7 @@ def _add_capability_edges(
     # Computed as aggregates before adding any edge, a role usually has more
     # than one rule, and the strongest grant across all of them decides the
     # edge, not whichever rule a loop happens to process last.
-    if any(has_wildcard(rule) for rule in rules):
+    if any(grants_full_access(rule) for rule in rules):
         graph.add_edge(
             role_node_id, CLUSTER_ADMIN, relation="has_full_access", confidence="reachable"
         )

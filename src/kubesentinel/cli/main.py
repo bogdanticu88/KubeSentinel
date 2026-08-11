@@ -1,8 +1,10 @@
 """KubeSentinel command line interface."""
 
+import json
 import sqlite3
 from collections.abc import Iterator
 from contextlib import contextmanager
+from pathlib import Path
 
 import typer
 from pydantic import TypeAdapter
@@ -13,15 +15,24 @@ from kubesentinel.collector.client import current_context_name
 from kubesentinel.collector.errors import CollectorError
 from kubesentinel.engines.attackpath.graph import build_graph
 from kubesentinel.engines.attackpath.paths import find_attack_paths
+from kubesentinel.engines.audit.report import build_audit_report
 from kubesentinel.engines.drift.diff import compare as compare_snapshots
 from kubesentinel.engines.misconfiguration.loader import RuleLoadError
 from kubesentinel.models.attackpath import AttackPath
 from kubesentinel.models.scan import Snapshot
 from kubesentinel.pipeline import PipelineResult, run_scan
 from kubesentinel.reporting import terminal
+from kubesentinel.reporting.html import render_html
+from kubesentinel.reporting.sarif import render_sarif
 from kubesentinel.storage import db
 from kubesentinel.storage import snapshots as snapshot_store
 from kubesentinel.storage.db import StorageError
+
+_REPORT_DEFAULT_NAMES = {
+    "html": "kubesentinel-report.html",
+    "sarif": "kubesentinel-report.sarif",
+    "json": "kubesentinel-report.json",
+}
 
 _ATTACK_PATHS_ADAPTER = TypeAdapter(list[AttackPath])
 
@@ -101,6 +112,47 @@ def scan(
         print(result.model_dump_json(indent=2))
     else:
         terminal.render(result, console)
+
+
+@app.command()
+def report(
+    context: str = typer.Option(None, "--context", help="kubeconfig context to scan"),
+    namespace: str = typer.Option(None, "--namespace", help="limit the scan to a single namespace"),
+    with_vulnerabilities: bool = typer.Option(
+        False, "--with-vulnerabilities", help="also scan workload images for known CVEs using Trivy"
+    ),
+    report_format: str = typer.Option("html", "--format", "-f", help="html, sarif, or json"),
+    output: str = typer.Option(
+        None, "--output", "-o", help="file to write, defaults by format, use - for stdout"
+    ),
+) -> None:
+    """Scan a cluster and write a report file (HTML, SARIF, or JSON)."""
+    if report_format not in _REPORT_DEFAULT_NAMES:
+        console.print(
+            f"[red]Error:[/red] unknown format {report_format!r}, use html, sarif, or json"
+        )
+        raise typer.Exit(code=1)
+
+    result = _run_pipeline(context, namespace, with_vulnerabilities).scan_result
+
+    if report_format == "html":
+        content = render_html(result)
+    elif report_format == "sarif":
+        content = json.dumps(render_sarif(result.findings), indent=2)
+    else:
+        content = result.model_dump_json(indent=2)
+
+    if output == "-":
+        print(content)
+        return
+
+    path = Path(output) if output else Path(_REPORT_DEFAULT_NAMES[report_format])
+    try:
+        path.write_text(content, encoding="utf-8")
+    except OSError as error:
+        console.print(f"[red]Error writing report:[/red] {error}")
+        raise typer.Exit(code=1) from error
+    console.print(f"Report written to {path}")
 
 
 @app.command()
@@ -211,11 +263,11 @@ def drift(
                 )
                 raise typer.Exit(code=1)
 
-    report = compare_snapshots(reference, current_snapshot)
+    drift_report = compare_snapshots(reference, current_snapshot)
     if output == "json":
-        print(report.model_dump_json(indent=2))
+        print(drift_report.model_dump_json(indent=2))
     else:
-        terminal.render_drift(report, console)
+        terminal.render_drift(drift_report, console)
 
 
 @app.command("attack-paths")
@@ -239,6 +291,49 @@ def attack_paths(
 
 
 @app.command()
+def audit(
+    context: str = typer.Option(None, "--context", help="kubeconfig context to scan"),
+    namespace: str = typer.Option(None, "--namespace", help="limit the scan to a single namespace"),
+    with_vulnerabilities: bool = typer.Option(
+        False, "--with-vulnerabilities", help="also scan workload images for known CVEs using Trivy"
+    ),
+    output: str = typer.Option("terminal", "--output", "-o", help="terminal or json"),
+) -> None:
+    """Run a numbered security audit and compare it against the previous one."""
+    pipeline_result = _run_pipeline(context, namespace, with_vulnerabilities)
+    current_snapshot = _to_snapshot(pipeline_result).model_copy(update={"is_audit": True})
+    cluster_name = current_snapshot.cluster
+
+    with _storage() as connection:
+        try:
+            snapshot_id = snapshot_store.save(connection, current_snapshot)
+        except StorageError as error:
+            console.print(f"[red]Error saving audit snapshot:[/red] {error}")
+            raise typer.Exit(code=1) from error
+
+        current_snapshot = current_snapshot.model_copy(update={"id": snapshot_id})
+        history = list(reversed(snapshot_store.list_snapshots(connection, cluster_name)))
+        previous_audits = [
+            snap for snap in snapshot_store.list_audits(connection, cluster_name)
+            if snap.id != snapshot_id
+        ]
+        reference = (
+            previous_audits[0]
+            if previous_audits
+            else snapshot_store.get_baseline(connection, cluster_name)
+        )
+
+    audit_report = build_audit_report(
+        len(previous_audits) + 1, current_snapshot, reference, history
+    )
+
+    if output == "json":
+        print(audit_report.model_dump_json(indent=2))
+    else:
+        terminal.render_audit(audit_report, console)
+
+
+@app.command()
 def compare(
     baseline_id: int = typer.Argument(..., help="snapshot id, the earlier side of the comparison"),
     current_id: int = typer.Argument(..., help="snapshot id, the later side of the comparison"),
@@ -256,11 +351,11 @@ def compare(
         console.print(f"[red]Error:[/red] no snapshot with id {current_id}")
         raise typer.Exit(code=1)
 
-    report = compare_snapshots(reference, current_snapshot)
+    drift_report = compare_snapshots(reference, current_snapshot)
     if output == "json":
-        print(report.model_dump_json(indent=2))
+        print(drift_report.model_dump_json(indent=2))
     else:
-        terminal.render_drift(report, console)
+        terminal.render_drift(drift_report, console)
 
 
 if __name__ == "__main__":

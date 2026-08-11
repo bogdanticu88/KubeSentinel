@@ -31,6 +31,14 @@ CREATE INDEX IF NOT EXISTS idx_snapshots_cluster_taken_at
     ON snapshots (cluster, taken_at);
 """
 
+# Columns added after a database's first CREATE TABLE already ran.
+# CREATE TABLE IF NOT EXISTS does nothing for a table that already exists,
+# an operator's existing local database from before a column existed would
+# otherwise break the first time something tries to read it.
+_ADDED_COLUMNS = {
+    "is_audit": "INTEGER NOT NULL DEFAULT 0",
+}
+
 
 class StorageError(Exception):
     """Local snapshot storage could not be opened, read, or written."""
@@ -52,6 +60,15 @@ def connect(db_path: Path | None = None) -> sqlite3.Connection:
         connection = sqlite3.connect(path)
         connection.row_factory = sqlite3.Row
         connection.executescript(_SCHEMA)
+        _migrate(connection)
     except (OSError, sqlite3.Error) as error:
         raise StorageError(f"could not open snapshot storage at {path}: {error}") from error
     return connection
+
+
+def _migrate(connection: sqlite3.Connection) -> None:
+    existing_columns = {row["name"] for row in connection.execute("PRAGMA table_info(snapshots)")}
+    for column, definition in _ADDED_COLUMNS.items():
+        if column not in existing_columns:
+            connection.execute(f"ALTER TABLE snapshots ADD COLUMN {column} {definition}")
+    connection.commit()

@@ -1,8 +1,9 @@
-"""Terminal rendering of a scan result, a drift report, and attack paths."""
+"""Terminal rendering of a scan result, a drift report, attack paths, and an audit."""
 
 from rich.console import Console
 
 from kubesentinel.models.attackpath import AttackPath
+from kubesentinel.models.audit import AuditReport
 from kubesentinel.models.drift import DriftReport
 from kubesentinel.models.scan import ScanResult
 
@@ -175,4 +176,46 @@ def render_attack_paths(paths: list[AttackPath], console: Console | None = None)
     if len(paths) > len(shown):
         remaining = len(paths) - len(shown)
         console.print(f"... and {remaining} more, use --output json for the full list")
+        console.print()
+
+
+def render_audit(report: AuditReport, console: Console | None = None) -> None:
+    console = console or Console()
+
+    console.print()
+    console.print(f"[bold]Kubernetes Security Audit #{report.number}[/bold]")
+    console.print()
+    console.print(f"Cluster: {report.cluster}")
+    console.print()
+
+    for severity in SEVERITY_ORDER:
+        console.print(f"{severity.upper():<10} {report.findings_by_severity.get(severity, 0)}")
+    console.print()
+
+    if report.drift is not None:
+        new_count = len(report.drift.new_findings)
+        resolved_count = len(report.drift.resolved_findings)
+        drift_count = len(report.drift.resource_changes)
+        console.print(f"New findings          {new_count}")
+        console.print(f"Resolved findings      {resolved_count}")
+        console.print(f"Drift events           {drift_count}")
+    else:
+        console.print("No previous audit or baseline yet, this is this cluster's first audit.")
+
+    path_delta = report.new_attack_paths - report.previous_attack_paths
+    delta_text = "unchanged" if path_delta == 0 else f"{path_delta:+d}"
+    console.print(f"Attack paths           {report.new_attack_paths} ({delta_text})")
+    console.print()
+
+    score_text = f"{report.score}/100" if report.score is not None else "not available"
+    console.print(f"Security Score         {score_text}")
+    if report.drift is not None and report.drift.score_before is not None:
+        console.print(f"Previous Score         {report.drift.score_before}/100")
+    console.print()
+
+    if report.security_debt.total_open:
+        console.print("[bold]Security debt[/bold]")
+        for category in report.security_debt.by_category[:10]:
+            console.print(f"  {category.category:<20} {category.count}")
+        console.print(f"  Trend: {report.security_debt.trend}")
         console.print()

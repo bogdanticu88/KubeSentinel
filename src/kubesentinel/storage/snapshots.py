@@ -25,15 +25,16 @@ def save(connection: sqlite3.Connection, snapshot: Snapshot) -> int:
         cursor = connection.execute(
             """
             INSERT INTO snapshots (
-                cluster, taken_at, is_baseline, kubernetes_version, node_count,
+                cluster, taken_at, is_baseline, is_audit, kubernetes_version, node_count,
                 score_overall, resources_json, findings_json, score_json,
                 counts_json, warnings_json
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 snapshot.cluster,
                 snapshot.taken_at.isoformat(),
                 int(snapshot.is_baseline),
+                int(snapshot.is_audit),
                 snapshot.kubernetes_version,
                 snapshot.node_count,
                 snapshot.score.overall,
@@ -98,6 +99,14 @@ def list_snapshots(connection: sqlite3.Connection, cluster: str) -> list[Snapsho
     return [_row_to_snapshot(row) for row in rows]
 
 
+def list_audits(connection: sqlite3.Connection, cluster: str) -> list[Snapshot]:
+    rows = connection.execute(
+        "SELECT * FROM snapshots WHERE cluster = ? AND is_audit = 1 ORDER BY taken_at DESC",
+        (cluster,),
+    ).fetchall()
+    return [_row_to_snapshot(row) for row in rows]
+
+
 def set_baseline(connection: sqlite3.Connection, snapshot_id: int) -> None:
     row = connection.execute(
         "SELECT cluster FROM snapshots WHERE id = ?", (snapshot_id,)
@@ -120,6 +129,7 @@ def _row_to_snapshot(row: sqlite3.Row) -> Snapshot:
         cluster=row["cluster"],
         taken_at=datetime.fromisoformat(row["taken_at"]),
         is_baseline=bool(row["is_baseline"]),
+        is_audit=bool(row["is_audit"]),
         kubernetes_version=row["kubernetes_version"],
         node_count=row["node_count"],
         resources=_RESOURCES_ADAPTER.validate_json(row["resources_json"]),
